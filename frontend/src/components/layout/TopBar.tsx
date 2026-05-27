@@ -19,15 +19,36 @@ export default function TopBar({ title }: Props) {
 
   useEffect(() => {
     loadNotifications()
-    const id = setInterval(loadNotifications, 30000)
+    // Poll more often (15s) so bell updates feel responsive
+    const id = setInterval(loadNotifications, 15000)
     return () => clearInterval(id)
   }, [])
+
+  // Refresh whenever the dropdown is opened
+  useEffect(() => { if (showNotif) loadNotifications() }, [showNotif])
 
   const unreadCount = notifications.filter((n) => !n.is_read).length
 
   const markAllRead = async () => {
     await notificationsApi.markAllRead()
     loadNotifications()
+  }
+
+  const markOneRead = async (n: any) => {
+    if (n.is_read) return
+    try {
+      await notificationsApi.markRead(n.id)
+      loadNotifications()
+    } catch { /* ignore */ }
+  }
+
+  const typeColor = (t: string) => {
+    switch (t) {
+      case 'success': return 'bg-green-50 border-l-4 border-green-400'
+      case 'warning': return 'bg-yellow-50 border-l-4 border-yellow-400'
+      case 'error':   return 'bg-red-50 border-l-4 border-red-400'
+      default:        return 'bg-blue-50 border-l-4 border-blue-400'
+    }
   }
 
   return (
@@ -97,12 +118,21 @@ export default function TopBar({ title }: Props) {
               ) : (
                 <div className="divide-y divide-gray-50">
                   {notifications.map((n) => (
-                    <div key={n.id} className={`p-3 ${!n.is_read ? 'bg-blue-50/50' : ''}`}>
-                      <p className="text-sm font-medium text-gray-900">{n.title}</p>
-                      <p className="text-xs text-gray-600 mt-0.5">{n.message}</p>
-                      <p className="text-[10px] text-gray-400 mt-1">
-                        {new Date(n.created_at).toLocaleString('th-TH')}
-                      </p>
+                    <div
+                      key={n.id}
+                      onClick={() => markOneRead(n)}
+                      className={`p-3 cursor-pointer hover:bg-gray-50 ${!n.is_read ? typeColor(n.type) : ''}`}
+                    >
+                      <div className="flex items-start gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900">{n.title}</p>
+                          <p className="text-xs text-gray-600 mt-0.5 break-words">{n.message}</p>
+                          <p className="text-[10px] text-gray-400 mt-1">
+                            {new Date(n.created_at).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                        {!n.is_read && <span className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />}
+                      </div>
                     </div>
                   ))}
                 </div>

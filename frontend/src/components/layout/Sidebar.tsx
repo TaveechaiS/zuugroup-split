@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
@@ -9,6 +9,7 @@ import {
   FilePlus, Plus, LogOut, X,
 } from 'lucide-react'
 import { logout } from '@/lib/api/auth'
+import { badgesApi } from '@/lib/api/services'
 import { useUI } from '@/lib/ui-context'
 
 interface Props {
@@ -17,6 +18,16 @@ interface Props {
   mobileOpen: boolean
   onMobileClose: () => void
 }
+
+// Map a nav href to the badge key from /api/badges
+const BADGE_KEY: Record<string, string> = {
+  '/dashboard/admin/customer-requests':      'customer_requests',
+  '/dashboard/admin/orders':                 'pending_orders',
+  '/dashboard/manager/quotations-pending':   'pending_quotations',
+  '/dashboard/manager/orders-pending':       'pending_orders',
+}
+
+const SEEN_KEY = 'zuugroup_badge_seen'
 
 const NAV: Record<string, { href: string; label: string; icon: any }[]> = {
   admin: [
@@ -71,6 +82,44 @@ export default function Sidebar({ role, user, mobileOpen, onMobileClose }: Props
   const pathname = usePathname()
   const router = useRouter()
   const items = NAV[role] ?? []
+  const [badges, setBadges] = useState<Record<string, number>>({})
+  const [seen, setSeen] = useState<Record<string, number>>({})
+
+  // Load badge counts + poll every 20s
+  useEffect(() => {
+    const load = () => badgesApi.get().then(setBadges).catch(() => { /* ignore */ })
+    load()
+    const id = setInterval(load, 20000)
+    return () => clearInterval(id)
+  }, [])
+
+  // Restore "seen" counts from localStorage on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SEEN_KEY)
+      if (raw) setSeen(JSON.parse(raw))
+    } catch { /* ignore */ }
+  }, [])
+
+  // When user visits a path, mark its current badge count as "seen"
+  useEffect(() => {
+    const key = BADGE_KEY[pathname]
+    if (!key) return
+    const current = badges[key] ?? 0
+    if ((seen[pathname] ?? -1) !== current) {
+      const next = { ...seen, [pathname]: current }
+      setSeen(next)
+      try { localStorage.setItem(SEEN_KEY, JSON.stringify(next)) } catch { /* ignore */ }
+    }
+  }, [pathname, badges]) // eslint-disable-line
+
+  const hasUnseen = (href: string): { show: boolean; count: number } => {
+    const key = BADGE_KEY[href]
+    if (!key) return { show: false, count: 0 }
+    const current = badges[key] ?? 0
+    const seenCount = seen[href] ?? 0
+    return { show: current > seenCount && current > 0, count: current }
+  }
 
   // Close mobile drawer on route change
   useEffect(() => { onMobileClose() }, [pathname]) // eslint-disable-line
@@ -132,17 +181,29 @@ export default function Sidebar({ role, user, mobileOpen, onMobileClose }: Props
           {items.map((item) => {
             const active = pathname === item.href
             const Icon = item.icon
+            const { show: hasDot, count } = hasUnseen(item.href)
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition ${
+                className={`relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition ${
                   active ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-50'
                 }`}
-                title={collapsed ? item.label : undefined}
+                title={collapsed ? `${item.label}${hasDot ? ` (${count} ใหม่)` : ''}` : undefined}
               >
-                <Icon size={18} className="shrink-0" />
-                {!collapsed && <span className="truncate">{item.label}</span>}
+                <span className="relative shrink-0 inline-flex">
+                  <Icon size={18} />
+                  {hasDot && (
+                    <span className="absolute -top-1 -left-1 min-w-[14px] h-[14px] px-1 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center ring-2 ring-white">
+                      {count > 9 ? '9+' : count}
+                    </span>
+                  )}
+                </span>
+                {!collapsed && (
+                  <span className="flex-1 truncate flex items-center gap-2">
+                    {item.label}
+                  </span>
+                )}
               </Link>
             )
           })}

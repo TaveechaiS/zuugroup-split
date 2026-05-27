@@ -80,8 +80,16 @@ export default function OrderReviewClient({ order }: { order: any }) {
             </tbody>
           </table></div>
           <div className="px-5 py-3 border-t border-gray-100 bg-gray-50">
-            <div className="flex justify-end items-center gap-3 text-base font-bold text-gray-900">
-              <span>ยอดรวม:</span><span>฿{order.total_amount?.toLocaleString()}</span>
+            <div className="ml-auto max-w-xs space-y-1 text-sm">
+              {order.subtotal !== undefined && order.subtotal > 0 && (
+                <div className="flex justify-between text-gray-600"><span>ยอดก่อน VAT:</span><span>฿{order.subtotal?.toLocaleString()}</span></div>
+              )}
+              {order.vat_amount !== undefined && order.vat_amount > 0 && (
+                <div className="flex justify-between text-gray-600"><span>VAT ({order.vat_percent ?? 7}%):</span><span>฿{order.vat_amount?.toLocaleString()}</span></div>
+              )}
+              <div className="flex justify-between text-base font-bold text-gray-900 pt-1.5 border-t border-gray-200">
+                <span>ยอดสุทธิ:</span><span>฿{order.total_amount?.toLocaleString()}</span>
+              </div>
             </div>
           </div>
         </div>

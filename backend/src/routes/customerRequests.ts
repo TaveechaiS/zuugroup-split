@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../lib/supabase'
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/auth'
 import { asyncHandler } from '../middleware/errorHandler'
 import { logActivity } from '../lib/activityLog'
+import { notifyRole, notifyUser } from '../lib/notify'
 import { z } from 'zod'
 
 const router = Router()
@@ -56,6 +57,16 @@ router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: Authe
     entityId: data.id,
     description: `ส่งคำขอเพิ่มลูกค้า ${data.company_name}`,
   })
+
+  // Notify all admins of the new request
+  await notifyRole('admin', {
+    title: 'มีคำขอเพิ่มลูกค้าใหม่',
+    message: `${req.user!.email ?? 'ผู้ใช้'} ส่งคำขอเพิ่มลูกค้า "${data.company_name}"`,
+    type: 'info',
+    entityType: 'customer_request',
+    entityId: data.id,
+  })
+
   res.status(201).json({ data })
 }))
 

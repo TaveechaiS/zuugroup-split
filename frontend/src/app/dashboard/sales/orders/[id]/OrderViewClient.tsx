@@ -39,7 +39,11 @@ export default function OrderViewClient({ order }: Props) {
       total_price: it.total_price,
       image_url: it.product?.image_url,
     })),
+    subtotal: order.subtotal,
+    vat_percent: order.vat_percent,
+    vat_amount: order.vat_amount,
     total_amount: order.total_amount,
+    notes: order.notes,
   })
 
   const download = () => setPreviewHtml(buildOrderHtml(buildData()))
@@ -98,10 +102,17 @@ export default function OrderViewClient({ order }: Props) {
               ))}
             </tbody>
           </table></div>
-          <div className="p-5 border-t border-gray-100 flex justify-end">
-            <div className="text-right">
-              <p className="text-sm text-gray-500">ยอดรวม</p>
-              <p className="text-2xl font-bold text-gray-900">฿{order.total_amount?.toLocaleString()}</p>
+          <div className="p-5 border-t border-gray-100 bg-gray-50">
+            <div className="ml-auto max-w-xs space-y-1.5 text-sm">
+              {order.subtotal !== undefined && order.subtotal > 0 && (
+                <div className="flex justify-between text-gray-600"><span>ยอดก่อน VAT:</span><span>฿{order.subtotal?.toLocaleString()}</span></div>
+              )}
+              {order.vat_amount !== undefined && order.vat_amount > 0 && (
+                <div className="flex justify-between text-gray-600"><span>VAT ({order.vat_percent ?? 7}%):</span><span>฿{order.vat_amount?.toLocaleString()}</span></div>
+              )}
+              <div className="flex justify-between font-bold text-base text-gray-900 pt-1.5 border-t border-gray-200">
+                <span>ยอดสุทธิ:</span><span>฿{order.total_amount?.toLocaleString()}</span>
+              </div>
             </div>
           </div>
         </div>

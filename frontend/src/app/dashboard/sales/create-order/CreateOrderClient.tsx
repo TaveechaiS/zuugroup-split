@@ -13,6 +13,8 @@ export default function CreateOrderClient({ customers, products }: Props) {
   const [customerId, setCustomerId] = useState('')
   const [items, setItems] = useState<OrderItem[]>([])
   const [customerPrices, setCustomerPrices] = useState<Record<string, number>>({})
+  const [vatPercent, setVatPercent] = useState(7)
+  const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -24,7 +26,9 @@ export default function CreateOrderClient({ customers, products }: Props) {
     })
   }, [customerId])
 
-  const total = useMemo(() => items.reduce((s, it) => s + it.unit_price * it.quantity, 0), [items])
+  const subtotal = useMemo(() => items.reduce((s, it) => s + it.unit_price * it.quantity, 0), [items])
+  const vatAmount = useMemo(() => +(subtotal * vatPercent / 100).toFixed(2), [subtotal, vatPercent])
+  const total = useMemo(() => +(subtotal + vatAmount).toFixed(2), [subtotal, vatAmount])
 
   const addItem = () => setItems([...items, { product_id: '', quantity: 1, unit_price: 0 }])
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
@@ -47,7 +51,7 @@ export default function CreateOrderClient({ customers, products }: Props) {
 
     setSaving(true)
     try {
-      await ordersApi.create({ customer_id: customerId, items })
+      await ordersApi.create({ customer_id: customerId, items, vat_percent: vatPercent, notes: notes || undefined })
       router.push('/dashboard/sales')
       router.refresh()
     } catch (err: any) {
@@ -124,9 +128,24 @@ export default function CreateOrderClient({ customers, products }: Props) {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-100 p-5">
-          <div className="flex justify-between text-base font-bold text-gray-900">
-            <span>ยอดรวมทั้งสิ้น</span><span>฿{total.toLocaleString()}</span>
+        <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">หมายเหตุ (ถ้ามี)</label>
+            <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div className="grid grid-cols-2 gap-3 max-w-xs ml-auto">
+            <label className="text-sm text-gray-700 self-center">VAT (%)</label>
+            <input type="number" min="0" max="100" step="0.1" value={vatPercent}
+              onChange={(e) => setVatPercent(Number(e.target.value))}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 text-right" />
+          </div>
+          <div className="border-t border-gray-100 pt-3 space-y-1.5 max-w-xs ml-auto text-sm">
+            <div className="flex justify-between text-gray-600"><span>ยอดก่อน VAT</span><span>฿{subtotal.toLocaleString()}</span></div>
+            <div className="flex justify-between text-gray-600"><span>VAT ({vatPercent}%)</span><span>฿{vatAmount.toLocaleString()}</span></div>
+            <div className="flex justify-between text-base font-bold text-gray-900 pt-1.5 border-t border-gray-200">
+              <span>ยอดสุทธิ</span><span>฿{total.toLocaleString()}</span>
+            </div>
           </div>
         </div>
 

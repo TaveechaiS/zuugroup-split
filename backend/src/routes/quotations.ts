@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../lib/supabase'
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/auth'
 import { asyncHandler } from '../middleware/errorHandler'
 import { logActivity } from '../lib/activityLog'
+import { notifyRole, notifyTeamManager } from '../lib/notify'
 import { z } from 'zod'
 
 const router = Router()
@@ -74,7 +75,7 @@ router.get('/', asyncHandler(async (req: AuthenticatedRequest, res) => {
 router.get('/:id', asyncHandler(async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from('quotations')
-    .select('*, customer:customers(*), creator:users!created_by(first_name, last_name, email), items:quotation_items(*, product:products(name, unit, image_url))')
+    .select('*, customer:customers(*), creator:users!created_by(first_name, last_name, email, role), items:quotation_items(*, product:products(name, unit, image_url))')
     .eq('id', req.params.id).single()
   if (error) return res.status(404).json({ error: 'Not found' })
   res.json({ data })
@@ -127,6 +128,28 @@ router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: Authe
     entityId: quotation.id,
     description: `สร้างใบเสนอราคา ${quotation.quotation_number} (สถานะ: ${finalStatus}, ยอด ${total_amount})`,
   })
+
+  // Notifications
+  if (finalStatus === 'pending') {
+    // Sales-created quotation → tell their manager to review
+    await notifyTeamManager(req.user!.id, {
+      title: 'มีใบเสนอราคารออนุมัติ',
+      message: `${req.user!.email ?? 'พนักงาน'} ส่งใบเสนอราคา ${quotation.quotation_number} (฿${total_amount.toLocaleString()}) รออนุมัติ`,
+      type: 'info',
+      entityType: 'quotation',
+      entityId: quotation.id,
+    })
+  }
+  if (autoApprove) {
+    // Manager auto-approved → tell admins for visibility
+    await notifyRole('admin', {
+      title: 'ใบเสนอราคาใหม่ (อนุมัติอัตโนมัติ)',
+      message: `ผู้จัดการสร้าง+อนุมัติใบเสนอราคา ${quotation.quotation_number} (฿${total_amount.toLocaleString()})`,
+      type: 'success',
+      entityType: 'quotation',
+      entityId: quotation.id,
+    })
+  }
 
   res.status(201).json({ data: quotation })
 }))

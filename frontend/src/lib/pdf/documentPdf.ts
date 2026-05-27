@@ -1,9 +1,10 @@
 // src/lib/pdf/documentPdf.ts
 //
-// PDF generator that uses HTML + html2canvas so Thai characters render
-// correctly (browser handles complex shaping / combining marks).
-// The HTML is built off-screen, captured to a canvas, then placed into
-// a jsPDF A4 page. This avoids jsPDF's lack of OpenType GPOS support.
+// PDF generator: HTML + html2canvas (so Thai shaping is correct).
+// Output is A4 portrait with proper multi-page support:
+//   - Page 1: header, customer block, items chunk, page-N/Total footer
+//   - Page 2..N-1: header, items chunk, page-N/Total footer
+//   - Last page: header, items chunk, notes + signature, page-N/Total footer
 
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
@@ -18,7 +19,17 @@ const ZUU = {
   taxId: '0125561035117',
 }
 
-const ISSUER_TITLE = 'รองกรรมการผู้จัดการ'
+const DEFAULT_ISSUER_TITLE = 'รองกรรมการผู้จัดการ'
+const ROLE_TITLE: Record<string, string> = {
+  admin:   'ผู้ดูแลระบบ',
+  manager: 'ผู้จัดการ',
+  sales:   'พนักงานขาย',
+  cfo:     'ผู้บริหาร',
+}
+function issuerTitle(role?: string | null): string {
+  if (!role) return DEFAULT_ISSUER_TITLE
+  return ROLE_TITLE[role] ?? DEFAULT_ISSUER_TITLE
+}
 
 const NOTES = [
   'เครดิตการชำระเงิน 90 วัน  นับจากวันจัดส่งสินค้า',
@@ -41,6 +52,17 @@ function thaiDate(d: Date | string | undefined): string {
 }
 
 // ============================================================
+// Pagination — how many items fit per page.
+// Notes + signature appear on EVERY page (so the per-page item count
+// is reduced to leave room for them). Totals box appears only on the
+// last page (it's a summary).
+// ============================================================
+const ITEMS_FIRST_PAGE = 4           // customer block + footer
+const ITEMS_MIDDLE_PAGE = 6          // header + items + footer
+const ITEMS_LAST_PAGE = 4            // totals + footer
+const ITEMS_ONLY_PAGE = 4            // single-page (all blocks)
+
+// ============================================================
 // Types
 // ============================================================
 export interface DocData {
@@ -58,6 +80,7 @@ export interface DocData {
   creator?: {
     first_name?: string
     last_name?: string
+    role?: string
   }
   items: Array<{
     name: string
@@ -82,6 +105,27 @@ const fmt = (n: number) =>
 const esc = (s: any) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
 
 // ============================================================
+// Image loading (URL → data URL, parallel, cached per call)
+// ============================================================
+async function loadImageDataUrl(url: string | undefined | null): Promise<string | null> {
+  if (!url) return null
+  if (url.startsWith('data:')) return url
+  try {
+    const res = await fetch(url, { mode: 'cors' })
+    if (!res.ok) return null
+    const blob = await res.blob()
+    return await new Promise<string>((resolve, reject) => {
+      const r = new FileReader()
+      r.onload = () => resolve(r.result as string)
+      r.onerror = reject
+      r.readAsDataURL(blob)
+    })
+  } catch {
+    return null
+  }
+}
+
+// ============================================================
 // Public entry points
 // ============================================================
 export async function generateQuotationPdf(data: DocData): Promise<Blob> {
@@ -92,15 +136,12 @@ export async function generateOrderPdf(data: DocData): Promise<Blob> {
   return await generateDocumentPdf('คำสั่งซื้อ', data)
 }
 
-/** Build a full standalone HTML document (with embedded CSS) for the
- *  given doc data. Used by PdfPreviewModal to render an iframe preview
- *  without going through PDF rendering at all. */
 export function buildQuotationHtml(data: DocData): string {
-  return wrapStandalone(STYLES + buildHtml('ใบเสนอราคา', data))
+  return wrapStandalone(STYLES + buildAllPagesHtml('ใบเสนอราคา', data))
 }
 
 export function buildOrderHtml(data: DocData): string {
-  return wrapStandalone(STYLES + buildHtml('คำสั่งซื้อ', data))
+  return wrapStandalone(STYLES + buildAllPagesHtml('คำสั่งซื้อ', data))
 }
 
 function wrapStandalone(inner: string): string {
@@ -112,7 +153,7 @@ function wrapStandalone(inner: string): string {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet" />
 <style>
-  body { margin: 0; background: #e5e7eb; display: flex; justify-content: center; padding: 20px 0; }
+  body { margin: 0; background: #e5e7eb; display: flex; flex-direction: column; align-items: center; padding: 20px 0; gap: 16px; }
 </style>
 </head><body>
 ${inner}
@@ -120,10 +161,51 @@ ${inner}
 }
 
 // ============================================================
-// Build HTML
+// Page chunking — split items across pages
 // ============================================================
-function buildHtml(title: string, data: DocData): string {
-  const items = data.items.map((it, idx) => {
+function chunkItems<T>(items: T[]): T[][] {
+  if (items.length === 0) return [[]]
+  // single-page case
+  if (items.length <= ITEMS_ONLY_PAGE) return [items]
+
+  const pages: T[][] = []
+  // first page
+  pages.push(items.slice(0, ITEMS_FIRST_PAGE))
+  let i = ITEMS_FIRST_PAGE
+  // middle pages — but we want to know which is last so we can reserve space.
+  // strategy: take ITEMS_MIDDLE_PAGE chunks until the remaining items fit
+  // in a last-page-with-footer space.
+  while (i < items.length) {
+    const remaining = items.length - i
+    if (remaining <= ITEMS_LAST_PAGE) {
+      pages.push(items.slice(i))
+      break
+    }
+    pages.push(items.slice(i, i + ITEMS_MIDDLE_PAGE))
+    i += ITEMS_MIDDLE_PAGE
+  }
+  return pages
+}
+
+// ============================================================
+// Render one page's HTML
+// ============================================================
+interface PageContext {
+  isFirst: boolean
+  isLast: boolean
+  pageNum: number
+  totalPages: number
+}
+
+function buildPageHtml(
+  title: string,
+  data: DocData,
+  pageItems: DocData['items'],
+  itemStartIdx: number,
+  ctx: PageContext,
+): string {
+  const itemsHtml = pageItems.map((it, i) => {
+    const overallIdx = itemStartIdx + i + 1
     const imgTag = it.image_url
       ? `<img class="prod-img" src="${esc(it.image_url)}" crossorigin="anonymous" alt="" />`
       : ''
@@ -132,7 +214,7 @@ function buildHtml(title: string, data: DocData): string {
       : `ราคาในใบเสนอราคาเป็นราคาต่อ${esc(it.unit ?? 'หน่วย')}`
     return `
       <tr>
-        <td class="c-center">${idx + 1}</td>
+        <td class="c-center">${overallIdx}</td>
         <td>
           <div class="prod-name">${esc(it.name)}</div>
           <div class="prod-desc">${desc}</div>
@@ -147,75 +229,119 @@ function buildHtml(title: string, data: DocData): string {
 
   const fullName = [data.creator?.first_name, data.creator?.last_name]
     .filter(Boolean).join(' ') || '...........................'
-
   const taxId = data.customer.tax_id ?? data.customer.drug_license_number ?? ''
+
+  // ----- Header (every page) -----
+  const headerHtml = `
+    <div class="header">
+      <img class="logo" src="/images/logo-quotation.png" alt="ZUU" />
+      <div class="company">
+        <div class="company-name">${esc(ZUU.nameEn)}</div>
+        <div class="company-line">${esc(ZUU.address)}</div>
+        <div class="company-line">โทรศัพท์ : ${esc(ZUU.phone)}</div>
+        <div class="company-line">เลขประจำตัวผู้เสียภาษี : ${esc(ZUU.taxId)}</div>
+      </div>
+    </div>
+    <div class="divider"></div>
+
+    <div class="title">${esc(title)}${ctx.isFirst ? '' : ' (ต่อ)'}</div>
+
+    <div class="date-row">
+      <div class="date-text">${esc(thaiDate(data.createdAt))}</div>
+      <div class="num-text">เลขที่ : ${esc(data.number)}</div>
+    </div>`
+
+  // ----- Customer block (first page only) -----
+  const customerHtml = ctx.isFirst ? `
+    <div class="customer">
+      <div class="row"><span class="lbl">เรียน</span>${esc(data.customer.company_name ?? '')}</div>
+      ${data.customer.contact_name ? `<div class="row"><span class="lbl">ผู้ติดต่อ</span>${esc(data.customer.contact_name)}</div>` : ''}
+      <div class="row"><span class="lbl">ที่อยู่</span>${esc(data.customer.address ?? '')}</div>
+      <div class="row"><span class="lbl">โทรศัพท์</span>${esc(data.customer.phone ?? '')}</div>
+      <div class="row"><span class="lbl">เลขประจำตัวผู้เสียภาษี :</span>${esc(taxId)}</div>
+    </div>
+    <div class="subtitle">บริษัทฯ มีความยินดีที่จะเสนอราคาสินค้า  ดังต่อไปนี้</div>
+  ` : ''
+
+  // ----- Items table (always shown) -----
+  const tableHtml = `
+    <table class="items">
+      <thead>
+        <tr>
+          <th style="width: 7%;">ลำดับ</th>
+          <th>รายการ</th>
+          <th style="width: 9%;">จำนวน</th>
+          <th style="width: 9%;">หน่วย</th>
+          <th style="width: 16%;">ราคา/หน่วย<br/>รวม VAT</th>
+          <th style="width: 18%;">จำนวนเงิน(บาท)<br/>รวม VAT</th>
+        </tr>
+      </thead>
+      <tbody>${itemsHtml}</tbody>
+    </table>`
+
+  // ----- Totals box (last page only — it's a summary) -----
+  const totalsHtml = ctx.isLast ? `
+    <div class="totals">
+      ${data.subtotal !== undefined ? `<div class="totals-row"><span>ยอดก่อน VAT</span><span>${fmt(data.subtotal)}</span></div>` : ''}
+      ${data.vat_amount !== undefined ? `<div class="totals-row"><span>VAT (${data.vat_percent ?? 7}%)</span><span>${fmt(data.vat_amount)}</span></div>` : ''}
+      <div class="totals-row totals-grand"><span>ยอดสุทธิ (บาท)</span><span>${fmt(data.total_amount)}</span></div>
+    </div>
+  ` : ''
+
+  // ----- Notes + Signature (EVERY page) -----
+  const footerHtml = `
+    <div class="footer">
+      <div class="notes">
+        <div class="notes-title">หมายเหตุและเงื่อนไข</div>
+        ${NOTES.map((n) => `<div class="note-item">- ${esc(n)}</div>`).join('')}
+        ${ctx.isLast && data.notes ? `<div class="note-item" style="margin-top:6px;">หมายเหตุ : ${esc(data.notes)}</div>` : ''}
+        ${ctx.isLast && data.contract_period_days ? `<div class="note-item">ระยะเวลาสัญญา : ${data.contract_period_days} วัน</div>` : ''}
+      </div>
+      <div class="sign">
+        <div class="sign-line">ลงชื่อ ........................................ ผู้เสนอราคา</div>
+        <div class="sign-name">( ${esc(fullName)} )</div>
+        <div class="sign-title">${esc(issuerTitle(data.creator?.role))}</div>
+      </div>
+    </div>`
+
+  // ----- Page footer -----
+  const pageFooterHtml = `
+    <div class="page-footer">
+      หน้า ${ctx.pageNum} / ${ctx.totalPages}
+    </div>`
 
   return `
 <div class="doc">
-  <!-- Header: logo + company info centered -->
-  <div class="header">
-    <img class="logo" src="/images/logo-quotation.png" alt="ZUU" />
-    <div class="company">
-      <div class="company-name">${esc(ZUU.nameEn)}</div>
-      <div class="company-line">${esc(ZUU.address)}</div>
-      <div class="company-line">โทรศัพท์ : ${esc(ZUU.phone)}</div>
-      <div class="company-line">เลขประจำตัวผู้เสียภาษี : ${esc(ZUU.taxId)}</div>
-    </div>
+  <div class="doc-body">
+    ${headerHtml}
+    ${customerHtml}
+    ${tableHtml}
+    ${totalsHtml}
+    ${footerHtml}
   </div>
-  <div class="divider"></div>
-
-  <!-- Title centered -->
-  <div class="title">${esc(title)}</div>
-
-  <!-- Date right -->
-  <div class="date-row">
-    <div class="date-text">${esc(thaiDate(data.createdAt))}</div>
-    <div class="num-text">เลขที่ : ${esc(data.number)}</div>
-  </div>
-
-  <!-- Customer block left -->
-  <div class="customer">
-    <div class="row"><span class="lbl">เรียน</span>${esc(data.customer.company_name ?? '')}</div>
-    ${data.customer.contact_name ? `<div class="row"><span class="lbl">ผู้ติดต่อ</span>${esc(data.customer.contact_name)}</div>` : ''}
-    <div class="row"><span class="lbl">ที่อยู่</span>${esc(data.customer.address ?? '')}</div>
-    <div class="row"><span class="lbl">โทรศัพท์</span>${esc(data.customer.phone ?? '')}</div>
-    <div class="row"><span class="lbl">เลขประจำตัวผู้เสียภาษี :</span>${esc(taxId)}</div>
-  </div>
-
-  <div class="subtitle">บริษัทฯ มีความยินดีที่จะเสนอราคาสินค้า  ดังต่อไปนี้</div>
-
-  <!-- Items table -->
-  <table class="items">
-    <thead>
-      <tr>
-        <th style="width: 7%;">ลำดับ</th>
-        <th>รายการ</th>
-        <th style="width: 9%;">จำนวน</th>
-        <th style="width: 9%;">หน่วย</th>
-        <th style="width: 16%;">ราคา/หน่วย<br/>รวม VAT</th>
-        <th style="width: 18%;">จำนวนเงิน(บาท)<br/>รวม VAT</th>
-      </tr>
-    </thead>
-    <tbody>${items}</tbody>
-  </table>
-
-  <!-- Footer: notes left, signature right -->
-  <div class="footer">
-    <div class="notes">
-      <div class="notes-title">หมายเหตุและเงื่อนไข</div>
-      ${NOTES.map((n) => `<div class="note-item">- ${esc(n)}</div>`).join('')}
-      ${data.notes ? `<div class="note-item" style="margin-top:6px;">หมายเหตุ : ${esc(data.notes)}</div>` : ''}
-    </div>
-    <div class="sign">
-      <div class="sign-line">ลงชื่อ ........................................ ผู้เสนอราคา</div>
-      <div class="sign-name">( ${esc(fullName)} )</div>
-      <div class="sign-title">${esc(ISSUER_TITLE)}</div>
-    </div>
-  </div>
-</div>
-`
+  ${pageFooterHtml}
+</div>`
 }
 
+function buildAllPagesHtml(title: string, data: DocData): string {
+  const pages = chunkItems(data.items)
+  const total = pages.length
+  let startIdx = 0
+  return pages.map((pageItems, i) => {
+    const html = buildPageHtml(title, data, pageItems, startIdx, {
+      isFirst: i === 0,
+      isLast: i === total - 1,
+      pageNum: i + 1,
+      totalPages: total,
+    })
+    startIdx += pageItems.length
+    return html
+  }).join('')
+}
+
+// ============================================================
+// Styles
+// ============================================================
 const STYLES = `
 <style>
   .doc {
@@ -223,229 +349,179 @@ const STYLES = `
     color: #111;
     font-size: 14px;
     line-height: 1.5;
-    width: 794px;            /* ~A4 width at 96dpi */
-    padding: 30px 36px;
+    width: 794px;            /* A4 width at 96dpi */
+    height: 1123px;          /* A4 height at 96dpi */
+    padding: 24px 36px 20px 36px;
     background: #fff;
     box-sizing: border-box;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
   .doc * { box-sizing: border-box; }
+  .doc-body { flex: 1; min-height: 0; }
 
   /* Header */
   .header {
     display: flex;
     align-items: flex-start;
     gap: 16px;
-    margin-bottom: 8px;
-  }
-  .logo {
-    width: 100px;
-    height: auto;
-    object-fit: contain;
-    flex-shrink: 0;
-  }
-  .company {
-    flex: 1;
-    text-align: center;
-    padding-top: 4px;
-  }
-  .company-name {
-    font-size: 18px;
     margin-bottom: 4px;
   }
-  .company-line {
-    font-size: 13px;
-    color: #374151;
-    margin: 2px 0;
-  }
+  .logo { width: 88px; height: auto; object-fit: contain; flex-shrink: 0; }
+  .company { flex: 1; text-align: center; padding-top: 4px; }
+  .company-name { font-size: 17px; margin-bottom: 4px; }
+  .company-line { font-size: 12px; color: #374151; margin: 2px 0; }
 
-  .divider {
-    border-bottom: 1px solid #d1d5db;
-    margin: 6px 0 10px;
-  }
+  .divider { border-bottom: 1px solid #d1d5db; margin: 4px 0 8px; }
 
   /* Title */
-  .title {
-    text-align: center;
-    font-size: 22px;
-    margin: 4px 0 10px;
-  }
+  .title { text-align: center; font-size: 20px; margin: 2px 0 6px; }
 
   /* Date / number */
-  .date-row {
-    text-align: right;
-    margin-bottom: 4px;
-  }
-  .date-text { font-size: 14px; }
-  .num-text { font-size: 12px; color: #6b7280; margin-top: 2px; }
+  .date-row { text-align: right; margin-bottom: 4px; }
+  .date-text { font-size: 13px; }
+  .num-text { font-size: 11px; color: #6b7280; margin-top: 2px; }
 
   /* Customer */
-  .customer {
-    margin: 4px 0 8px;
-  }
-  .customer .row {
-    margin: 4px 0;
-    font-size: 14px;
-  }
-  .customer .lbl {
-    display: inline-block;
-    margin-right: 8px;
-    color: #111;
-  }
+  .customer { margin: 2px 0 6px; }
+  .customer .row { margin: 3px 0; font-size: 13px; }
+  .customer .lbl { display: inline-block; margin-right: 8px; color: #111; }
 
-  .subtitle {
-    text-align: center;
-    margin: 8px 0 6px;
-    font-size: 14px;
-  }
+  .subtitle { text-align: center; margin: 6px 0 4px; font-size: 13px; }
 
   /* Table */
   table.items {
     width: 100%;
     border-collapse: collapse;
-    font-size: 13px;
-    margin-bottom: 14px;
+    font-size: 12px;
+    margin-bottom: 8px;
   }
-  table.items th,
-  table.items td {
+  table.items th, table.items td {
     border: 1px solid #000;
-    padding: 6px 8px;
+    padding: 5px 7px;
     vertical-align: top;
   }
   table.items th {
     background: #f3f4f6;
     text-align: center;
-    font-size: 12px;
+    font-size: 11px;
     line-height: 1.3;
   }
   table.items .c-center { text-align: center; }
   table.items .c-right { text-align: right; }
 
-  .prod-name { font-size: 13px; }
-  .prod-desc { font-size: 12px; color: #4b5563; margin-top: 2px; }
+  .prod-name { font-size: 12px; }
+  .prod-desc { font-size: 11px; color: #4b5563; margin-top: 2px; }
   .prod-img {
     display: block;
-    max-width: 80px;
-    max-height: 70px;
-    margin-top: 6px;
+    max-width: 72px;
+    max-height: 60px;
+    margin-top: 5px;
     object-fit: contain;
   }
 
-  /* Footer */
+  /* Totals box */
+  .totals { margin: 6px 0 10px; margin-left: auto; width: 280px; font-size: 13px; }
+  .totals-row { display: flex; justify-content: space-between; padding: 2px 4px; color: #374151; }
+  .totals-grand {
+    font-size: 15px;
+    color: #111;
+    border-top: 1px solid #000;
+    padding-top: 5px;
+    margin-top: 3px;
+  }
+
+  /* Footer (notes left + signature right) */
   .footer {
     display: flex;
     justify-content: space-between;
     gap: 24px;
-    margin-top: 18px;
+    margin-top: 8px;
   }
-  .notes {
-    flex: 1;
-    font-size: 13px;
-  }
-  .notes-title { margin-bottom: 4px; }
+  .notes { flex: 1; font-size: 12px; }
+  .notes-title { margin-bottom: 3px; }
   .note-item { color: #374151; margin: 2px 0; }
 
-  .sign {
-    width: 280px;
-    text-align: center;
-    font-size: 14px;
-  }
-  .sign-line { text-align: right; margin-bottom: 8px; }
-  .sign-name { margin: 4px 0; }
+  .sign { width: 270px; text-align: center; font-size: 13px; }
+  .sign-line { text-align: right; margin-bottom: 6px; }
+  .sign-name { margin: 3px 0; }
   .sign-title { margin: 2px 0; }
+
+  /* Page footer */
+  .page-footer {
+    text-align: center;
+    font-size: 10px;
+    color: #9ca3af;
+    padding-top: 4px;
+    border-top: 1px solid #f3f4f6;
+    margin-top: 4px;
+  }
 </style>
 `
 
 // ============================================================
-// Convert image src to data URL so html2canvas can capture them
-// even when origin is different.
+// Inline images (so html2canvas can capture cross-origin images)
 // ============================================================
 async function inlineImages(root: HTMLElement): Promise<void> {
   const imgs = Array.from(root.querySelectorAll('img'))
   await Promise.all(imgs.map(async (img) => {
     const src = img.getAttribute('src') ?? ''
     if (!src || src.startsWith('data:')) return
-    try {
-      const res = await fetch(src, { mode: 'cors' })
-      if (!res.ok) { img.remove(); return }
-      const blob = await res.blob()
-      const dataUrl: string = await new Promise((resolve, reject) => {
-        const r = new FileReader()
-        r.onload = () => resolve(r.result as string)
-        r.onerror = reject
-        r.readAsDataURL(blob)
-      })
-      img.setAttribute('src', dataUrl)
-    } catch {
-      img.remove()
-    }
+    const dataUrl = await loadImageDataUrl(src)
+    if (dataUrl) img.setAttribute('src', dataUrl)
+    else img.remove()
   }))
 }
 
 // ============================================================
-// Main generator
+// Main generator — render each page separately, combine in PDF
 // ============================================================
 async function generateDocumentPdf(title: string, data: DocData): Promise<Blob> {
-  // Build off-screen container
-  const container = document.createElement('div')
-  container.style.cssText = 'position:fixed; top:0; left:-10000px; z-index:-1; opacity:0; pointer-events:none;'
-  container.innerHTML = STYLES + buildHtml(title, data)
-  document.body.appendChild(container)
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
+  const pageW = pdf.internal.pageSize.getWidth()   // 210mm
+  const pageH = pdf.internal.pageSize.getHeight()  // 297mm
 
-  try {
-    const docNode = container.querySelector('.doc') as HTMLElement
-    // Ensure all images inside are inlined (so html2canvas can capture them
-    // when CORS is restrictive)
-    await inlineImages(docNode)
+  const pages = chunkItems(data.items)
+  const total = pages.length
+  let startIdx = 0
 
-    // Capture
-    const canvas = await html2canvas(docNode, {
-      scale: 2,
-      backgroundColor: '#ffffff',
-      useCORS: true,
-      allowTaint: true,
-      logging: false,
-      windowWidth: 794,
+  for (let i = 0; i < pages.length; i++) {
+    const isFirst = i === 0
+    const isLast = i === total - 1
+
+    // Build standalone container for this page
+    const container = document.createElement('div')
+    container.style.cssText = 'position:fixed; top:0; left:-10000px; z-index:-1; opacity:0; pointer-events:none;'
+    container.innerHTML = STYLES + buildPageHtml(title, data, pages[i], startIdx, {
+      isFirst, isLast, pageNum: i + 1, totalPages: total,
     })
+    document.body.appendChild(container)
 
-    // Build PDF (A4 portrait, 210x297 mm)
-    const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
-    const pageW = pdf.internal.pageSize.getWidth()
-    const pageH = pdf.internal.pageSize.getHeight()
-    const margin = 0 // canvas already has its own padding
-    const usableW = pageW - margin * 2
+    try {
+      const docNode = container.querySelector('.doc') as HTMLElement
+      await inlineImages(docNode)
 
-    const imgData = canvas.toDataURL('image/jpeg', 0.95)
-    const imgRatio = canvas.height / canvas.width
-    const imgWmm = usableW
-    const imgHmm = imgWmm * imgRatio
+      const canvas = await html2canvas(docNode, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        windowWidth: 794,
+        windowHeight: 1123,
+      })
 
-    if (imgHmm <= pageH) {
-      pdf.addImage(imgData, 'JPEG', margin, margin, imgWmm, imgHmm)
-    } else {
-      // Multi-page: slice the canvas into page-height chunks
-      const pageHeightPx = (pageH / imgWmm) * canvas.width
-      let renderedHeight = 0
-      while (renderedHeight < canvas.height) {
-        const sliceHeight = Math.min(pageHeightPx, canvas.height - renderedHeight)
-        const sliceCanvas = document.createElement('canvas')
-        sliceCanvas.width = canvas.width
-        sliceCanvas.height = sliceHeight
-        const ctx = sliceCanvas.getContext('2d')!
-        ctx.fillStyle = '#fff'
-        ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height)
-        ctx.drawImage(canvas, 0, renderedHeight, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight)
+      const imgData = canvas.toDataURL('image/jpeg', 0.95)
+      if (i > 0) pdf.addPage()
+      pdf.addImage(imgData, 'JPEG', 0, 0, pageW, pageH)
 
-        const sliceData = sliceCanvas.toDataURL('image/jpeg', 0.95)
-        const sliceHmm = (sliceHeight / canvas.width) * imgWmm
-
-        if (renderedHeight > 0) pdf.addPage()
-        pdf.addImage(sliceData, 'JPEG', margin, margin, imgWmm, sliceHmm)
-        renderedHeight += sliceHeight
-      }
+      startIdx += pages[i].length
+    } finally {
+      document.body.removeChild(container)
     }
-
-    return pdf.output('blob')
-  } finally {
-    document.body.removeChild(container)
   }
+
+  return pdf.output('blob')
 }

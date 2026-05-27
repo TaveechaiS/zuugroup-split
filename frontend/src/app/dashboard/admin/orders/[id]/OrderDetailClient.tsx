@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, X } from 'lucide-react'
+import { Check, X, ArrowLeft } from 'lucide-react'
 import { ordersApi } from '@/lib/api/services'
 
 const STATUS: Record<string, { label: string; color: string }> = {
@@ -37,9 +37,19 @@ export default function OrderDetailClient({ order }: { order: any }) {
     } catch (err: any) { setError(err.message); setSaving(false); setShowCancel(false) }
   }
 
+  const cancellable = ['pending_review', 'processing'].includes(order.status)
+
   return (
     <div className="p-4 sm:p-6">
       <div className="max-w-5xl mx-auto space-y-5">
+        {/* Back button */}
+        <button
+          onClick={() => router.push('/dashboard/admin/orders')}
+          className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-blue-600 transition"
+        >
+          <ArrowLeft size={16} /> ย้อนกลับ
+        </button>
+
         {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
 
         <div className="bg-white rounded-xl border border-gray-100 p-5">
@@ -87,16 +97,30 @@ export default function OrderDetailClient({ order }: { order: any }) {
             </tbody>
           </table></div>
           <div className="px-5 py-3 border-t border-gray-100 bg-gray-50">
-            <div className="flex justify-end items-center gap-3 text-base font-bold text-gray-900">
-              <span>ยอดรวม:</span><span>฿{order.total_amount?.toLocaleString()}</span>
+            <div className="ml-auto max-w-xs space-y-1 text-sm">
+              {order.subtotal !== undefined && order.subtotal > 0 && (
+                <div className="flex justify-between text-gray-600"><span>ยอดก่อน VAT:</span><span>฿{order.subtotal?.toLocaleString()}</span></div>
+              )}
+              {order.vat_amount !== undefined && order.vat_amount > 0 && (
+                <div className="flex justify-between text-gray-600"><span>VAT ({order.vat_percent ?? 7}%):</span><span>฿{order.vat_amount?.toLocaleString()}</span></div>
+              )}
+              <div className="flex justify-between text-base font-bold text-gray-900 pt-1.5 border-t border-gray-200">
+                <span>ยอดสุทธิ:</span><span>฿{order.total_amount?.toLocaleString()}</span>
+              </div>
             </div>
           </div>
         </div>
 
-        {order.status === 'processing' && !showCancel && (
+        {cancellable && !showCancel && (
           <div className="flex gap-3 justify-end">
             <button onClick={() => setShowCancel(true)} className="px-5 py-2.5 border border-red-200 text-red-700 rounded-lg text-sm font-medium hover:bg-red-50 flex items-center gap-2"><X size={16} /> ยกเลิก</button>
-            <button onClick={confirm} disabled={saving} className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium flex items-center gap-2 disabled:opacity-60"><Check size={16} /> {saving ? 'บันทึก...' : 'ยืนยันการขาย'}</button>
+            <button onClick={confirm} disabled={saving} className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium flex items-center gap-2 disabled:opacity-60"><Check size={16} /> {saving ? 'กำลังบันทึก…' : 'ยืนยันการขาย'}</button>
+          </div>
+        )}
+
+        {!cancellable && (
+          <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 text-center text-sm text-gray-500">
+            สถานะ "{STATUS[order.status]?.label ?? order.status}" — ไม่สามารถเปลี่ยนแปลงได้แล้ว
           </div>
         )}
 

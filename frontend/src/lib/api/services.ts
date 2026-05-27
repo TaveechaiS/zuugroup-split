@@ -86,3 +86,7 @@ export const reportsApi = {
 export const activityLogsApi = {
   list: () => api.get('/activity-logs').then((r) => r.data),
 }
+
+export const badgesApi = {
+  get: () => api.get('/badges').then((r) => r.data as Record<string, number>),
+}

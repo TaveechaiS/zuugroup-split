@@ -19,9 +19,18 @@ router.post('/login', asyncHandler(async (req, res) => {
   const { data, error } = await supabaseAdmin.auth.signInWithPassword({ email, password })
   if (error) return res.status(401).json({ error: error.message })
 
-  // Load profile
+  // Load profile + check active
   const { data: profile } = await supabaseAdmin
     .from('users').select('*, team:teams(id, name)').eq('id', data.user.id).single()
+
+  if (!profile) {
+    return res.status(404).json({ error: 'ไม่พบโปรไฟล์ผู้ใช้' })
+  }
+  if (profile.is_active === false) {
+    // Sign them out of the session that was just created
+    try { await supabaseAdmin.auth.admin.signOut(data.session?.access_token ?? '') } catch { /* ignore */ }
+    return res.status(403).json({ error: 'บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ' })
+  }
 
   await logActivity({
     userId: data.user.id,

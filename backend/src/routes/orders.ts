@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../lib/supabase'
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/auth'
 import { asyncHandler } from '../middleware/errorHandler'
 import { logActivity } from '../lib/activityLog'
+import { notifyRole, notifyTeamManager } from '../lib/notify'
 import { z } from 'zod'
 
 const router = Router()
@@ -18,6 +19,8 @@ const itemSchema = z.object({
 const createSchema = z.object({
   customer_id: z.string().uuid(),
   items: z.array(itemSchema).min(1),
+  vat_percent: z.number().nonnegative().optional(),
+  notes: z.string().optional(),
 })
 
 router.get('/', asyncHandler(async (req: AuthenticatedRequest, res) => {
@@ -52,7 +55,7 @@ router.get('/', asyncHandler(async (req: AuthenticatedRequest, res) => {
 router.get('/:id', asyncHandler(async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from('orders')
-    .select('*, customer:customers(*), creator:users!created_by(first_name, last_name, email), items:order_items(*, product:products(name, unit, image_url))')
+    .select('*, customer:customers(*), creator:users!created_by(first_name, last_name, email, role), items:order_items(*, product:products(name, unit, image_url))')
     .eq('id', req.params.id).single()
   if (error) return res.status(404).json({ error: 'Not found' })
   res.json({ data })
@@ -60,7 +63,10 @@ router.get('/:id', asyncHandler(async (req, res) => {
 
 router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const body = createSchema.parse(req.body)
-  const total = body.items.reduce((s, i) => s + i.unit_price * i.quantity, 0)
+  const subtotal = body.items.reduce((s, i) => s + i.unit_price * i.quantity, 0)
+  const vat_percent = body.vat_percent ?? 7
+  const vat_amount = +(subtotal * vat_percent / 100).toFixed(2)
+  const total = +(subtotal + vat_amount).toFixed(2)
 
   // Manager-created orders skip review workflow and go straight to processing
   const autoApprove = req.user!.role === 'manager'
@@ -71,7 +77,11 @@ router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: Authe
     .insert({
       customer_id: body.customer_id,
       created_by: req.user!.id,
+      subtotal,
+      vat_percent,
+      vat_amount,
       total_amount: total,
+      notes: body.notes ?? null,
       status: finalStatus,
       reviewed_by: autoApprove ? req.user!.id : null,
       reviewed_at: autoApprove ? new Date().toISOString() : null,
@@ -97,6 +107,28 @@ router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: Authe
     entityId: order.id,
     description: `สร้างคำสั่งซื้อ ${order.order_number} (สถานะ: ${finalStatus}, ยอด ${total})`,
   })
+
+  // Notifications
+  if (finalStatus === 'pending_review') {
+    // Sales-created order → tell their manager to review
+    await notifyTeamManager(req.user!.id, {
+      title: 'มีคำสั่งซื้อรอตรวจสอบ',
+      message: `${req.user!.email ?? 'พนักงาน'} ส่งคำสั่งซื้อ ${order.order_number} (฿${total.toLocaleString()}) รอตรวจสอบ`,
+      type: 'info',
+      entityType: 'order',
+      entityId: order.id,
+    })
+  }
+  // Always notify admins of new orders that reach "processing" — they confirm sale
+  if (finalStatus === 'processing') {
+    await notifyRole('admin', {
+      title: 'มีคำสั่งซื้อรอยืนยันการขาย',
+      message: `คำสั่งซื้อ ${order.order_number} (฿${total.toLocaleString()}) พร้อมให้ยืนยันการขาย`,
+      type: 'info',
+      entityType: 'order',
+      entityId: order.id,
+    })
+  }
 
   res.status(201).json({ data: order })
 }))
@@ -127,6 +159,15 @@ router.post('/:id/review-pass', requireRole('manager', 'admin'), asyncHandler(as
     entityType: 'order',
     entityId: o.id,
     description: `อนุมัติการตรวจสอบคำสั่งซื้อ ${o.order_number}`,
+  })
+
+  // Tell admins so they can confirm the sale
+  await notifyRole('admin', {
+    title: 'คำสั่งซื้อพร้อมยืนยันการขาย',
+    message: `คำสั่งซื้อ ${o.order_number} (฿${(o.total_amount ?? 0).toLocaleString()}) ผ่านการตรวจสอบจากผู้จัดการแล้ว`,
+    type: 'info',
+    entityType: 'order',
+    entityId: o.id,
   })
 
   res.json({ success: true })
@@ -165,13 +206,22 @@ router.post('/:id/review-reject', requireRole('manager', 'admin'), asyncHandler(
 /** POST /api/orders/:id/confirm - admin marks complete (triggers stock decrement) */
 router.post('/:id/confirm', requireRole('admin'), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { data: o } = await supabaseAdmin.from('orders').select('*').eq('id', req.params.id).single()
-  if (!o) return res.status(404).json({ error: 'Not found' })
+  if (!o) return res.status(404).json({ error: 'ไม่พบคำสั่งซื้อ' })
 
-  await supabaseAdmin.from('orders').update({
+  const { data: updated, error: updateError } = await supabaseAdmin.from('orders').update({
     status: 'completed',
-    confirmed_by: req.user!.id,
-    confirmed_at: new Date().toISOString(),
-  }).eq('id', req.params.id)
+    processed_by: req.user!.id,
+    processed_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }).eq('id', req.params.id).select().single()
+
+  if (updateError) {
+    console.error('Order confirm update error:', updateError)
+    return res.status(500).json({ error: `ยืนยันการขายไม่สำเร็จ: ${updateError.message}` })
+  }
+  if (!updated || updated.status !== 'completed') {
+    return res.status(500).json({ error: 'ยืนยันการขายไม่สำเร็จ - ไม่สามารถเปลี่ยนสถานะได้' })
+  }
 
   await supabaseAdmin.from('notifications').insert({
     user_id: o.created_by,
@@ -190,15 +240,44 @@ router.post('/:id/confirm', requireRole('admin'), asyncHandler(async (req: Authe
     description: `ยืนยันการขายคำสั่งซื้อ ${o.order_number}`,
   })
 
-  res.json({ success: true })
+  // Notify creator's manager + CFO that a sale completed
+  await notifyTeamManager(o.created_by, {
+    title: 'มีคำสั่งซื้อยืนยันการขายแล้ว',
+    message: `คำสั่งซื้อ ${o.order_number} (฿${(o.total_amount ?? 0).toLocaleString()}) ยืนยันการขายเรียบร้อย`,
+    type: 'success',
+    entityType: 'order',
+    entityId: o.id,
+  })
+  await notifyRole('cfo', {
+    title: 'มียอดขายใหม่',
+    message: `คำสั่งซื้อ ${o.order_number} ยืนยันการขาย ฿${(o.total_amount ?? 0).toLocaleString()}`,
+    type: 'success',
+    entityType: 'order',
+    entityId: o.id,
+  })
+
+  res.json({ success: true, data: updated })
 }))
 
 router.post('/:id/cancel', requireRole('admin'), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { reason } = z.object({ reason: z.string().min(1) }).parse(req.body)
   const { data: o } = await supabaseAdmin.from('orders').select('order_number').eq('id', req.params.id).single()
-  await supabaseAdmin.from('orders').update({
-    status: 'cancelled', reject_reason: reason,
-  }).eq('id', req.params.id)
+  if (!o) return res.status(404).json({ error: 'ไม่พบคำสั่งซื้อ' })
+
+  const { data: updated, error: updateError } = await supabaseAdmin.from('orders').update({
+    status: 'cancelled',
+    reject_reason: reason,
+    updated_at: new Date().toISOString(),
+  }).eq('id', req.params.id).select().single()
+
+  if (updateError) {
+    console.error('Order cancel update error:', updateError)
+    return res.status(500).json({ error: `ยกเลิกคำสั่งซื้อไม่สำเร็จ: ${updateError.message}` })
+  }
+  if (!updated || updated.status !== 'cancelled') {
+    return res.status(500).json({ error: 'ยกเลิกคำสั่งซื้อไม่สำเร็จ - ไม่สามารถเปลี่ยนสถานะได้' })
+  }
+
   await logActivity({
     userId: req.user!.id,
     action: 'order.cancel',
@@ -206,7 +285,7 @@ router.post('/:id/cancel', requireRole('admin'), asyncHandler(async (req: Authen
     entityId: req.params.id,
     description: `ยกเลิกคำสั่งซื้อ ${o?.order_number ?? req.params.id}: ${reason}`,
   })
-  res.json({ success: true })
+  res.json({ success: true, data: updated })
 }))
 
 export default router
