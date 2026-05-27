@@ -16,7 +16,7 @@ export default function RequestDetailClient({ request }: { request: any }) {
     setSaving(true); setError('')
     try {
       await customerRequestsApi.approve(request.id)
-      router.push('/dashboard/admin/customer-requests'); router.refresh()
+      window.location.href = '/dashboard/admin/customer-requests'
     } catch (err: any) { setError(err.message); setSaving(false) }
   }
 
@@ -25,7 +25,7 @@ export default function RequestDetailClient({ request }: { request: any }) {
     setSaving(true); setError('')
     try {
       await customerRequestsApi.reject(request.id, reason)
-      router.push('/dashboard/admin/customer-requests'); router.refresh()
+      window.location.href = '/dashboard/admin/customer-requests'
     } catch (err: any) { setError(err.message); setSaving(false) }
   }
 

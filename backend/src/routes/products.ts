@@ -14,7 +14,7 @@ const productSchema = z.object({
   price_per_unit: z.number().nonnegative(),
   category_id: z.string().uuid().nullable().optional(),
   unit: z.string().optional(),
-  image_url: z.string().url().optional().or(z.literal('')),
+  image_url: z.string().optional().or(z.literal('')),
   status: z.enum(['available', 'unavailable']).default('available'),
 })
 

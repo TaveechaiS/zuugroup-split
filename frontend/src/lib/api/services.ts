@@ -50,6 +50,7 @@ export const quotationsApi = {
     api.get('/quotations', params).then((r) => r.data),
   get: (id: string) => api.get(`/quotations/${id}`).then((r) => r.data),
   create: (body: any) => api.post('/quotations', body).then((r) => r.data),
+  update: (id: string, body: any) => api.patch(`/quotations/${id}`, body).then((r) => r.data),
   approve: (id: string) => api.post(`/quotations/${id}/approve`),
   reject: (id: string, reason: string) => api.post(`/quotations/${id}/reject`, { reason }),
 }

@@ -16,7 +16,7 @@ export default function OrderReviewClient({ order }: { order: any }) {
     setSaving(true); setError('')
     try {
       await ordersApi.reviewPass(order.id)
-      router.push('/dashboard/manager/orders-pending'); router.refresh()
+      window.location.href = '/dashboard/manager/orders-pending'
     } catch (err: any) { setError(err.message); setSaving(false) }
   }
 
@@ -25,7 +25,7 @@ export default function OrderReviewClient({ order }: { order: any }) {
     setSaving(true); setError('')
     try {
       await ordersApi.reviewReject(order.id, reason)
-      router.push('/dashboard/manager/orders-pending'); router.refresh()
+      window.location.href = '/dashboard/manager/orders-pending'
     } catch (err: any) { setError(err.message); setSaving(false) }
   }
 

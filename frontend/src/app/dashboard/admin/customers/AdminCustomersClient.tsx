@@ -1,15 +1,17 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, Eye } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import CustomerFormClient from '@/components/shared/CustomerFormClient'
+import { CustomerDetailModal } from '@/components/shared/CustomersViewClient'
 
 interface Props { customers: any[]; onReload: () => void }
 
 export default function AdminCustomersClient({ customers, onReload }: Props) {
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
+  const [viewing, setViewing] = useState<any>(null)
   const router = useRouter()
 
   const filtered = customers.filter((c) =>
@@ -45,23 +47,34 @@ export default function AdminCustomersClient({ customers, onReload }: Props) {
               <th className="text-left px-5 py-3">ผู้ติดต่อ</th>
               <th className="text-left px-5 py-3">โทรศัพท์</th>
               <th className="text-left px-5 py-3">อีเมล</th>
-              <th className="text-left px-5 py-3">เลขใบอนุญาต</th>
+              <th className="text-left px-5 py-3">ที่อยู่</th>
+              <th className="text-center px-5 py-3">จัดการ</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {filtered.map((c) => (
-              <tr key={c.id} onClick={() => router.push(`/dashboard/admin/customers/${c.id}`)} className="hover:bg-gray-50 cursor-pointer">
+              <tr key={c.id} onClick={() => setViewing(c)} className="hover:bg-gray-50 cursor-pointer">
                 <td className="px-5 py-3.5 font-medium text-gray-900">{c.company_name}</td>
                 <td className="px-5 py-3.5 text-gray-600">{c.contact_name ?? '-'}</td>
                 <td className="px-5 py-3.5 text-gray-600">{c.phone ?? '-'}</td>
                 <td className="px-5 py-3.5 text-gray-600">{c.email ?? '-'}</td>
-                <td className="px-5 py-3.5 text-gray-600">{c.drug_license_number ?? '-'}</td>
+                <td className="px-5 py-3.5 text-gray-600 max-w-xs truncate">{c.address ?? '-'}</td>
+                <td className="px-5 py-3.5 text-center" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center justify-center gap-2">
+                    <button onClick={() => setViewing(c)} className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs font-medium">
+                      <Eye size={14} /> ดูรายละเอียด
+                    </button>
+                    <button onClick={() => router.push(`/dashboard/admin/customers/${c.id}`)} className="text-xs text-gray-500 hover:text-blue-600">แก้ไข</button>
+                  </div>
+                </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={5} className="text-center py-10 text-gray-400">ไม่พบลูกค้า</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={6} className="text-center py-10 text-gray-400">ไม่พบลูกค้า</td></tr>}
           </tbody>
         </table></div>
       </div>
+
+      {viewing && <CustomerDetailModal customer={viewing} onClose={() => setViewing(null)} />}
     </div>
   )
 }

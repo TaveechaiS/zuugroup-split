@@ -24,9 +24,8 @@ export default function OrderDetailClient({ order }: { order: any }) {
     setSaving(true); setError('')
     try {
       await ordersApi.confirm(order.id)
-      router.refresh()
-    } catch (err: any) { setError(err.message) }
-    finally { setSaving(false) }
+      window.location.href = '/dashboard/admin/orders'
+    } catch (err: any) { setError(err.message); setSaving(false) }
   }
 
   const cancel = async () => {
@@ -34,9 +33,8 @@ export default function OrderDetailClient({ order }: { order: any }) {
     setSaving(true); setError('')
     try {
       await ordersApi.cancel(order.id, reason)
-      router.refresh()
-    } catch (err: any) { setError(err.message) }
-    finally { setSaving(false); setShowCancel(false) }
+      window.location.href = '/dashboard/admin/orders'
+    } catch (err: any) { setError(err.message); setSaving(false); setShowCancel(false) }
   }
 
   return (

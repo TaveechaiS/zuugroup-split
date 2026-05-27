@@ -29,18 +29,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     const stored = currentUser()
-    if (!stored) {
-      fetchMe().then((u) => {
-        if (!u) router.push('/auth/login')
-        else {
-          setUser(u)
-          setLoading(false)
-          if (!pathname.includes(`/dashboard/${u.role}`)) {
-            router.push(`/dashboard/${u.role}`)
-          }
-        }
-      })
-    } else {
+    if (stored) {
       setUser(stored)
       setLoading(false)
       const segs = pathname.split('/')
@@ -49,6 +38,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         router.push(`/dashboard/${stored.role}`)
       }
     }
+    fetchMe().then((u) => {
+      if (!u) {
+        if (!stored) router.push('/auth/login')
+        return
+      }
+      setUser(u)
+      setLoading(false)
+      if (!pathname.includes(`/dashboard/${u.role}`)) {
+        router.push(`/dashboard/${u.role}`)
+      }
+    })
   }, [pathname, router])
 
   if (loading || !user) {

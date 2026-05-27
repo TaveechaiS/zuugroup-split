@@ -15,9 +15,9 @@ const requestSchema = z.object({
   phone: z.string().optional(),
   email: z.string().email().optional().or(z.literal('')),
   drug_license_number: z.string().optional(),
-  location_image_url: z.string().url().optional().or(z.literal('')),
-  drug_license_image_url: z.string().url().optional().or(z.literal('')),
-  hospital_license_image_url: z.string().url().optional().or(z.literal('')),
+  location_image_url: z.string().optional().or(z.literal('')),
+  drug_license_image_url: z.string().optional().or(z.literal('')),
+  hospital_license_image_url: z.string().optional().or(z.literal('')),
 })
 
 /** GET /api/customer-requests - Admin sees all pending */

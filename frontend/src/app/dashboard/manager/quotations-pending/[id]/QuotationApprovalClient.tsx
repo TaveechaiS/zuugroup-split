@@ -16,7 +16,7 @@ export default function QuotationApprovalClient({ quotation }: { quotation: any 
     setSaving(true); setError('')
     try {
       await quotationsApi.approve(quotation.id)
-      router.push('/dashboard/manager/quotations-pending'); router.refresh()
+      window.location.href = '/dashboard/manager/quotations-pending'
     } catch (err: any) { setError(err.message); setSaving(false) }
   }
 
@@ -25,7 +25,7 @@ export default function QuotationApprovalClient({ quotation }: { quotation: any 
     setSaving(true); setError('')
     try {
       await quotationsApi.reject(quotation.id, reason)
-      router.push('/dashboard/manager/quotations-pending'); router.refresh()
+      window.location.href = '/dashboard/manager/quotations-pending'
     } catch (err: any) { setError(err.message); setSaving(false) }
   }
 

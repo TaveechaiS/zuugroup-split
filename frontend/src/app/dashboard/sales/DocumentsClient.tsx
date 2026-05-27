@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Search, Download, Eye } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Search, Download, Eye, Edit2 } from 'lucide-react'
 import { generateQuotationPdf, generateOrderPdf } from '@/lib/pdf/documentPdf'
 import { quotationsApi, ordersApi } from '@/lib/api/services'
 
@@ -19,11 +20,13 @@ const O_STATUS: Record<string, { label: string; color: string }> = {
   rejected: { label: 'ไม่ผ่าน', color: 'bg-red-100 text-red-700' },
 }
 
-interface Props { quotations: any[]; orders: any[] }
+interface Props { quotations: any[]; orders: any[]; basePath?: string }
 
-export default function DocumentsClient({ quotations, orders }: Props) {
+export default function DocumentsClient({ quotations, orders, basePath = '/dashboard/sales' }: Props) {
+  const router = useRouter()
   const [tab, setTab] = useState<'all' | 'quotation' | 'order'>('all')
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
 
   const combined = useMemo(() => {
     const q = quotations.map((x) => ({ ...x, type: 'quotation' as const, number: x.quotation_number, statusInfo: Q_STATUS[x.status] }))
@@ -31,8 +34,18 @@ export default function DocumentsClient({ quotations, orders }: Props) {
     return [...q, ...o]
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .filter((d) => tab === 'all' || d.type === tab)
+      .filter((d) => statusFilter === 'all' || d.status === statusFilter)
       .filter((d) => `${d.number} ${d.customer?.company_name}`.toLowerCase().includes(search.toLowerCase()))
-  }, [tab, search, quotations, orders])
+  }, [tab, search, statusFilter, quotations, orders])
+
+  const statusOptions = useMemo(() => {
+    if (tab === 'quotation') return Object.entries(Q_STATUS).map(([k, v]) => ({ value: k, label: v.label }))
+    if (tab === 'order') return Object.entries(O_STATUS).map(([k, v]) => ({ value: k, label: v.label }))
+    return [
+      ...Object.entries(Q_STATUS).map(([k, v]) => ({ value: k, label: `[ใบเสนอ] ${v.label}` })),
+      ...Object.entries(O_STATUS).map(([k, v]) => ({ value: k, label: `[คำสั่ง] ${v.label}` })),
+    ]
+  }, [tab])
 
   const exportToPDF = async (doc: any) => {
     const isQuotation = doc.type === 'quotation'
@@ -72,7 +85,11 @@ export default function DocumentsClient({ quotations, orders }: Props) {
 
   const openDetail = (doc: any) => {
     const route = doc.type === 'quotation' ? 'quotations' : 'orders'
-    window.open(`/dashboard/sales/${route}/${doc.id}`, '_blank')
+    window.open(`${basePath}/${route}/${doc.id}`, '_blank')
+  }
+
+  const editDraft = (doc: any) => {
+    if (doc.type === 'quotation') router.push(`/dashboard/sales/quotations/${doc.id}/edit`)
   }
 
   return (
@@ -85,7 +102,7 @@ export default function DocumentsClient({ quotations, orders }: Props) {
               { id: 'quotation' as const, label: 'ใบเสนอราคา' },
               { id: 'order' as const, label: 'คำสั่งซื้อ' },
             ].map((t) => (
-              <button key={t.id} onClick={() => setTab(t.id)}
+              <button key={t.id} onClick={() => { setTab(t.id); setStatusFilter('all') }}
                 className={`px-3 py-1.5 rounded-md text-sm font-medium ${tab === t.id ? 'bg-white shadow-sm text-blue-700' : 'text-gray-600'}`}>
                 {t.label}
               </button>
@@ -96,6 +113,11 @@ export default function DocumentsClient({ quotations, orders }: Props) {
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ค้นหา..."
               className="pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-56" />
           </div>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="all">สถานะทั้งหมด</option>
+            {statusOptions.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+          </select>
           <p className="ml-auto text-sm text-gray-500">{combined.length} รายการ</p>
         </div>
 
@@ -132,6 +154,11 @@ export default function DocumentsClient({ quotations, orders }: Props) {
                 </td>
                 <td className="px-5 py-3.5">
                   <div className="flex items-center justify-center gap-1">
+                    {doc.type === 'quotation' && doc.status === 'draft' && (
+                      <button onClick={() => editDraft(doc)} className="text-gray-400 hover:text-blue-600 p-1.5 rounded transition" title="แก้ไขฉบับร่าง">
+                        <Edit2 size={15} />
+                      </button>
+                    )}
                     <button onClick={() => openDetail(doc)} className="text-gray-400 hover:text-blue-600 p-1.5 rounded transition" title="ดูข้อมูล">
                       <Eye size={15} />
                     </button>

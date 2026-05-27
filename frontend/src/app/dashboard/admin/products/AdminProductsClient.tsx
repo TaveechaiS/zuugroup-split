@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Plus, Edit2, Trash2 } from 'lucide-react'
+import { Search, Plus, Edit2, Trash2, Upload, X } from 'lucide-react'
 import { productsApi } from '@/lib/api/services'
 
 interface Props { products: any[]; categories: any[]; onReload: () => void }
@@ -13,6 +13,7 @@ export default function AdminProductsClient({ products, categories, onReload }: 
   const [editing, setEditing] = useState<any>(null)
   const [error, setError] = useState('')
   const router = useRouter()
+  const fileRef = useRef<HTMLInputElement>(null)
 
   const [form, setForm] = useState({ name: '', quantity: 0, price_per_unit: 0, category_id: '', unit: '', image_url: '', status: 'available' })
 
@@ -20,6 +21,13 @@ export default function AdminProductsClient({ products, categories, onReload }: 
 
   const startAdd = () => { setEditing(null); setForm({ name: '', quantity: 0, price_per_unit: 0, category_id: '', unit: '', image_url: '', status: 'available' }); setShowForm(true); setError('') }
   const startEdit = (p: any) => { setEditing(p); setForm({ name: p.name, quantity: p.quantity, price_per_unit: p.price_per_unit, category_id: p.category_id ?? '', unit: p.unit ?? '', image_url: p.image_url ?? '', status: p.status }); setShowForm(true); setError('') }
+
+  const handleFile = (file: File) => {
+    if (file.size > 2 * 1024 * 1024) { setError('ไฟล์ใหญ่เกิน 2MB'); return }
+    const reader = new FileReader()
+    reader.onloadend = () => setForm((f) => ({ ...f, image_url: reader.result as string }))
+    reader.readAsDataURL(file)
+  }
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault(); setError('')
@@ -85,25 +93,57 @@ export default function AdminProductsClient({ products, categories, onReload }: 
 
       {showForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-lg w-full p-6">
+          <div className="bg-white rounded-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="font-semibold text-gray-900 mb-4">{editing ? 'แก้ไขสินค้า' : 'เพิ่มสินค้าใหม่'}</h3>
             {error && <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm mb-3">{error}</div>}
             <form onSubmit={save} className="space-y-3">
-              <input required placeholder="ชื่อสินค้า" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
-              <div className="grid grid-cols-2 gap-3">
-                <input required type="number" placeholder="จำนวน" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} className="px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
-                <input placeholder="หน่วย (เช่น กล่อง)" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} className="px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">ชื่อสินค้า *</label>
+                <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
-              <input required type="number" step="0.01" placeholder="ราคา/หน่วย" value={form.price_per_unit} onChange={(e) => setForm({ ...form, price_per_unit: Number(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
-              <select value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="">-- ไม่มีหมวด --</option>
-                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-              <input placeholder="URL รูปสินค้า (ถ้ามี)" value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
-              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as any })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="available">พร้อมขาย</option>
-                <option value="unavailable">ปิดการขาย</option>
-              </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">จำนวนสินค้าคงเหลือ *</label>
+                  <input required type="number" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">หน่วย (เช่น กล่อง)</label>
+                  <input value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">ราคาขายต่อหน่วย (บาท) *</label>
+                <input required type="number" step="0.01" value={form.price_per_unit} onChange={(e) => setForm({ ...form, price_per_unit: Number(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">หมวดหมู่</label>
+                <select value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">-- ไม่มีหมวด --</option>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">รูปสินค้า</label>
+                <input ref={fileRef} type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }} className="hidden" />
+                <div className="flex items-center gap-3">
+                  <button type="button" onClick={() => fileRef.current?.click()} className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">
+                    <Upload size={14} /> อัพโหลดรูป
+                  </button>
+                  {form.image_url && (
+                    <div className="relative">
+                      <img src={form.image_url} alt="" className="w-16 h-16 object-cover rounded-lg border border-gray-200" />
+                      <button type="button" onClick={() => setForm({ ...form, image_url: '' })} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5"><X size={12} /></button>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">สถานะ</label>
+                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as any })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="available">พร้อมขาย</option>
+                  <option value="unavailable">ปิดการขาย</option>
+                </select>
+              </div>
               <div className="flex gap-2 justify-end pt-3">
                 <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 border border-gray-300 rounded-lg text-sm">ยกเลิก</button>
                 <button type="submit" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">บันทึก</button>

@@ -20,7 +20,7 @@ router.post('/login', asyncHandler(async (req, res) => {
 
   // Load profile
   const { data: profile } = await supabaseAdmin
-    .from('users').select('*').eq('id', data.user.id).single()
+    .from('users').select('*, team:teams(id, name)').eq('id', data.user.id).single()
 
   res.json({
     session: data.session,

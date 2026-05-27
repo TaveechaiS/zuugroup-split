@@ -54,6 +54,10 @@ const NAV: Record<string, { href: string; label: string; icon: any }[]> = {
   cfo: [
     { href: '/dashboard/cfo', label: 'แดชบอร์ด', icon: LayoutDashboard },
     { href: '/dashboard/cfo/reports', label: 'รายงาน', icon: FileBarChart },
+    { href: '/dashboard/cfo/users', label: 'ผู้ใช้ทั้งหมด', icon: Users },
+    { href: '/dashboard/cfo/teams', label: 'ทีมทั้งหมด', icon: UsersRound },
+    { href: '/dashboard/cfo/products', label: 'สินค้าทั้งหมด', icon: Package },
+    { href: '/dashboard/cfo/customers', label: 'ลูกค้าทั้งหมด', icon: UserPlus },
   ],
 }
 
@@ -152,6 +156,9 @@ export default function Sidebar({ role, user, mobileOpen, onMobileClose }: Props
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">{user.first_name} {user.last_name}</p>
                 <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                {(role === 'sales' || role === 'manager') && user.team?.name && (
+                  <p className="text-[10px] text-blue-600 font-medium truncate mt-0.5">ทีม: {user.team.name}</p>
+                )}
               </div>
             </div>
           )}

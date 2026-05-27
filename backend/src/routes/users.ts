@@ -10,7 +10,7 @@ const router = Router()
 router.use(requireAuth)
 
 /** GET /api/users - list (Admin) */
-router.get('/', requireRole('admin'), asyncHandler(async (_req, res) => {
+router.get('/', requireRole('admin', 'cfo'), asyncHandler(async (_req, res) => {
   const { data, error } = await supabaseAdmin
     .from('users')
     .select('*, team:teams(name)')
@@ -76,13 +76,22 @@ router.post('/', requireRole('admin'), asyncHandler(async (req, res) => {
   res.status(201).json({ data: profile })
 }))
 
-const updateUserSchema = createUserSchema.partial().omit({ password: true, email: true })
+const updateUserSchema = createUserSchema.partial().omit({ email: true }).extend({
+  password: z.string().min(6).optional(),
+})
 
 /** PATCH /api/users/:id */
 router.patch('/:id', requireRole('admin'), asyncHandler(async (req, res) => {
   const body = updateUserSchema.parse(req.body)
+  const { password, ...rest } = body
+
+  if (password) {
+    const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(req.params.id, { password })
+    if (authError) return res.status(400).json({ error: authError.message })
+  }
+
   const { data, error } = await supabaseAdmin
-    .from('users').update({ ...body, updated_at: new Date().toISOString() })
+    .from('users').update({ ...rest, updated_at: new Date().toISOString() })
     .eq('id', req.params.id).select().single()
   if (error) throw error
   res.json({ data })

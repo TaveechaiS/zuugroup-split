@@ -61,13 +61,19 @@ router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: Authe
   const body = createSchema.parse(req.body)
   const total = body.items.reduce((s, i) => s + i.unit_price * i.quantity, 0)
 
+  // Manager-created orders skip review workflow and go straight to processing
+  const autoApprove = req.user!.role === 'manager'
+  const finalStatus = autoApprove ? 'processing' : 'pending_review'
+
   const { data: order, error } = await supabaseAdmin
     .from('orders')
     .insert({
       customer_id: body.customer_id,
       created_by: req.user!.id,
       total_amount: total,
-      status: 'pending_review',
+      status: finalStatus,
+      reviewed_by: autoApprove ? req.user!.id : null,
+      reviewed_at: autoApprove ? new Date().toISOString() : null,
     })
     .select().single()
 

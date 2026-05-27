@@ -1,6 +1,7 @@
 'use client'
 
-import { ArrowLeft, Download } from 'lucide-react'
+import { ArrowLeft, Download, Edit2 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { generateQuotationPdf } from '@/lib/pdf/documentPdf'
 
 const STATUS: Record<string, { label: string; color: string }> = {
@@ -13,6 +14,7 @@ const STATUS: Record<string, { label: string; color: string }> = {
 interface Props { quotation: any }
 
 export default function QuotationViewClient({ quotation }: Props) {
+  const router = useRouter()
   const s = STATUS[quotation.status] ?? { label: quotation.status, color: 'bg-gray-100' }
 
   const download = () => {
@@ -60,9 +62,16 @@ export default function QuotationViewClient({ quotation }: Props) {
               <p className="text-sm text-gray-500">โดย: {quotation.creator?.first_name} {quotation.creator?.last_name}</p>
             </div>
           </div>
-          <button onClick={download} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
-            <Download size={15} /> ดาวน์โหลด PDF
-          </button>
+          <div className="flex gap-2">
+            {quotation.status === 'draft' && (
+              <button onClick={() => router.push(`/dashboard/sales/quotations/${quotation.id}/edit`)} className="flex items-center gap-2 border border-blue-200 text-blue-700 hover:bg-blue-50 px-4 py-2 rounded-lg text-sm font-medium">
+                <Edit2 size={15} /> แก้ไข
+              </button>
+            )}
+            <button onClick={download} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+              <Download size={15} /> ดาวน์โหลด PDF
+            </button>
+          </div>
         </div>
       </div>
 

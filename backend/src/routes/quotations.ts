@@ -86,6 +86,10 @@ router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: Authe
   const vat_amount = (subtotal * body.vat_percent) / 100
   const total_amount = subtotal + vat_amount
 
+  // Manager-created quotations skip approval workflow
+  const autoApprove = req.user!.role === 'manager' && body.status === 'pending'
+  const finalStatus = autoApprove ? 'approved' : body.status
+
   const { data: quotation, error } = await supabaseAdmin
     .from('quotations')
     .insert({
@@ -97,7 +101,9 @@ router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: Authe
       total_amount,
       notes: body.notes,
       contract_period_days: body.contract_period_days,
-      status: body.status,
+      status: finalStatus,
+      approved_by: autoApprove ? req.user!.id : null,
+      approved_at: autoApprove ? new Date().toISOString() : null,
     })
     .select().single()
 
@@ -114,6 +120,49 @@ router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: Authe
   await supabaseAdmin.from('quotation_items').insert(items)
 
   res.status(201).json({ data: quotation })
+}))
+
+/** PATCH /api/quotations/:id - update draft */
+router.patch('/:id', requireRole('sales', 'manager', 'admin'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const { data: existing } = await supabaseAdmin.from('quotations').select('*').eq('id', req.params.id).single()
+  if (!existing) return res.status(404).json({ error: 'Not found' })
+  if (existing.status !== 'draft' && existing.status !== 'pending') {
+    return res.status(400).json({ error: 'Can only edit draft or pending quotations' })
+  }
+  if (req.user!.role === 'sales' && existing.created_by !== req.user!.id) {
+    return res.status(403).json({ error: 'Forbidden' })
+  }
+
+  const body = createSchema.parse(req.body)
+  const subtotal = body.items.reduce((s, i) => s + (i.negotiated_price ?? i.unit_price) * i.quantity, 0)
+  const vat_amount = (subtotal * body.vat_percent) / 100
+  const total_amount = subtotal + vat_amount
+
+  const { error } = await supabaseAdmin.from('quotations').update({
+    customer_id: body.customer_id,
+    vat_percent: body.vat_percent,
+    subtotal,
+    vat_amount,
+    total_amount,
+    notes: body.notes,
+    contract_period_days: body.contract_period_days,
+    status: body.status,
+    updated_at: new Date().toISOString(),
+  }).eq('id', req.params.id)
+  if (error) throw error
+
+  await supabaseAdmin.from('quotation_items').delete().eq('quotation_id', req.params.id)
+  const items = body.items.map((i) => ({
+    quotation_id: req.params.id,
+    product_id: i.product_id,
+    quantity: i.quantity,
+    unit_price: i.unit_price,
+    negotiated_price: i.negotiated_price,
+    total_price: (i.negotiated_price ?? i.unit_price) * i.quantity,
+  }))
+  await supabaseAdmin.from('quotation_items').insert(items)
+
+  res.json({ success: true })
 }))
 
 /** POST /api/quotations/:id/approve - manager approves */

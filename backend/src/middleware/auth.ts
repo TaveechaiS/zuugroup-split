@@ -11,6 +11,7 @@ export interface AuthenticatedRequest extends Request {
     email: string
     role: Role
     team_id: string | null
+    team?: { id: string; name: string } | null
     first_name: string
     last_name: string
     jwt: string
@@ -62,7 +63,7 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
 
     const { data: profile, error } = await supabaseAdmin
       .from('users')
-      .select('id, email, role, team_id, first_name, last_name, is_active')
+      .select('id, email, role, team_id, first_name, last_name, is_active, team:teams(id, name)')
       .eq('id', userId)
       .single()
 
@@ -74,6 +75,7 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
       email: profile.email,
       role: profile.role,
       team_id: profile.team_id,
+      team: (profile as any).team ?? null,
       first_name: profile.first_name,
       last_name: profile.last_name,
       jwt: token,

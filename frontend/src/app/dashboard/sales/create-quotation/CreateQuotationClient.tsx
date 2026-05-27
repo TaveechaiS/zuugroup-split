@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Plus, Trash2 } from 'lucide-react'
 import { quotationsApi } from '@/lib/api/services'
 
-interface Props { customers: any[]; products: any[] }
+interface Props { customers: any[]; products: any[]; initial?: any }
 
 interface LineItem {
   product_id: string
@@ -14,14 +14,21 @@ interface LineItem {
   negotiated_price?: number
 }
 
-export default function CreateQuotationClient({ customers, products }: Props) {
+export default function CreateQuotationClient({ customers, products, initial }: Props) {
   const router = useRouter()
 
-  const [customerId, setCustomerId] = useState('')
-  const [vatPercent, setVatPercent] = useState(7)
-  const [notes, setNotes] = useState('')
-  const [contractDays, setContractDays] = useState(30)
-  const [items, setItems] = useState<LineItem[]>([])
+  const [customerId, setCustomerId] = useState(initial?.customer_id ?? '')
+  const [vatPercent, setVatPercent] = useState(initial?.vat_percent ?? 7)
+  const [notes, setNotes] = useState(initial?.notes ?? '')
+  const [contractDays, setContractDays] = useState(initial?.contract_period_days ?? 30)
+  const [items, setItems] = useState<LineItem[]>(
+    (initial?.items ?? []).map((it: any) => ({
+      product_id: it.product_id,
+      quantity: it.quantity,
+      unit_price: Number(it.unit_price),
+      negotiated_price: it.negotiated_price != null ? Number(it.negotiated_price) : undefined,
+    }))
+  )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -57,7 +64,7 @@ export default function CreateQuotationClient({ customers, products }: Props) {
 
     setSaving(true)
     try {
-      await quotationsApi.create({
+      const body = {
         customer_id: customerId,
         vat_percent: vatPercent,
         notes,
@@ -69,7 +76,12 @@ export default function CreateQuotationClient({ customers, products }: Props) {
           unit_price: i.unit_price,
           negotiated_price: i.negotiated_price ?? null,
         })),
-      })
+      }
+      if (initial?.id) {
+        await quotationsApi.update(initial.id, body)
+      } else {
+        await quotationsApi.create(body)
+      }
       router.push('/dashboard/sales')
       router.refresh()
     } catch (err: any) {
@@ -85,7 +97,7 @@ export default function CreateQuotationClient({ customers, products }: Props) {
         {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
 
         <div className="bg-white rounded-xl border border-gray-100 p-5">
-          <h3 className="font-semibold text-gray-900 mb-4">ข้อมูลทั่วไป</h3>
+          <h3 className="font-semibold text-gray-900 mb-4">ข้อมูลทั่วไป {initial?.id && <span className="text-xs text-blue-600 font-normal">(แก้ไขฉบับร่าง)</span>}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">ลูกค้า *</label>
