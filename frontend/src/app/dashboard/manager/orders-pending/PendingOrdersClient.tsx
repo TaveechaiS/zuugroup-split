@@ -44,7 +44,10 @@ export default function PendingOrdersClient({ orders }: { orders: any[] }) {
                 <td className="px-5 py-3.5 text-gray-900">{o.customer?.company_name ?? '-'}</td>
                 <td className="px-5 py-3.5 text-gray-600">{o.creator?.first_name} {o.creator?.last_name}</td>
                 <td className="px-5 py-3.5 text-right text-gray-900 font-medium">฿{o.total_amount?.toLocaleString()}</td>
-                <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{new Date(o.created_at).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+                <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">
+                  <div>{new Date(o.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                  <div className="text-xs text-gray-400">{new Date(o.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</div>
+                </td>
                 <td className="px-5 py-3.5"><ChevronRight size={16} className="text-gray-400" /></td>
               </tr>
             ))}

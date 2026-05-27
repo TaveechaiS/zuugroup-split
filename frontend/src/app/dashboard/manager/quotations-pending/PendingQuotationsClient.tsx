@@ -54,7 +54,10 @@ export default function PendingQuotationsClient({ quotations }: { quotations: an
                   {q.creator?.first_name} {q.creator?.last_name}
                 </td>
                 <td className="px-5 py-3.5 text-right text-gray-900 font-medium">฿{q.total_amount?.toLocaleString()}</td>
-                <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{new Date(q.created_at).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+                <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">
+                  <div>{new Date(q.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                  <div className="text-xs text-gray-400">{new Date(q.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</div>
+                </td>
                 <td className="px-5 py-3.5">
                   <ChevronRight size={16} className="text-gray-400" />
                 </td>

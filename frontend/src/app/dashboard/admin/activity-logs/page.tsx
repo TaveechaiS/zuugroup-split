@@ -109,7 +109,8 @@ export default function ActivityLogsPage() {
                 return (
                   <tr key={log.id} className="hover:bg-gray-50">
                     <td className="px-5 py-3 text-gray-600 text-xs whitespace-nowrap">
-                      {new Date(log.created_at).toLocaleString('th-TH', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                      <div>{new Date(log.created_at).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+                      <div className="text-gray-400">{new Date(log.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
                     </td>
                     <td className="px-5 py-3 text-gray-900">
                       {log.user ? `${log.user.first_name} ${log.user.last_name}` : <span className="text-gray-400">-</span>}
