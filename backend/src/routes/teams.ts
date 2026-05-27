@@ -3,6 +3,7 @@ import { Router } from 'express'
 import { supabaseAdmin } from '../lib/supabase'
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/auth'
 import { asyncHandler } from '../middleware/errorHandler'
+import { logActivity } from '../lib/activityLog'
 import { z } from 'zod'
 
 const router = Router()
@@ -32,26 +33,48 @@ router.get('/my', asyncHandler(async (req: AuthenticatedRequest, res) => {
   res.json({ data: { team, members } })
 }))
 
-router.post('/', requireRole('admin'), asyncHandler(async (req, res) => {
+router.post('/', requireRole('admin'), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const body = teamSchema.parse(req.body)
   const { data, error } = await supabaseAdmin
     .from('teams').insert(body)
     .select('*, members:users(*)').single()
   if (error) throw error
+  await logActivity({
+    userId: req.user!.id,
+    action: 'team.create',
+    entityType: 'team',
+    entityId: data.id,
+    description: `สร้างทีม ${data.name}`,
+  })
   res.status(201).json({ data })
 }))
 
-router.patch('/:id', requireRole('admin'), asyncHandler(async (req, res) => {
+router.patch('/:id', requireRole('admin'), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const body = teamSchema.partial().parse(req.body)
   const { data, error } = await supabaseAdmin
     .from('teams').update(body).eq('id', req.params.id).select().single()
   if (error) throw error
+  await logActivity({
+    userId: req.user!.id,
+    action: 'team.update',
+    entityType: 'team',
+    entityId: data.id,
+    description: `แก้ไขทีม ${data.name}`,
+  })
   res.json({ data })
 }))
 
-router.delete('/:id', requireRole('admin'), asyncHandler(async (req, res) => {
+router.delete('/:id', requireRole('admin'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const { data: existing } = await supabaseAdmin.from('teams').select('name').eq('id', req.params.id).single()
   const { error } = await supabaseAdmin.from('teams').delete().eq('id', req.params.id)
   if (error) throw error
+  await logActivity({
+    userId: req.user!.id,
+    action: 'team.delete',
+    entityType: 'team',
+    entityId: req.params.id,
+    description: `ลบทีม ${existing?.name ?? req.params.id}`,
+  })
   res.json({ success: true })
 }))
 

@@ -83,7 +83,7 @@ export function CustomerDetailModal({ customer, onClose }: { customer: any; onCl
           <div>
             <h3 className="font-semibold text-gray-900 text-lg">{customer.company_name}</h3>
             <p className="text-xs text-gray-500 mt-0.5">
-              เพิ่มเมื่อ {new Date(customer.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}
+              เพิ่มเมื่อ {new Date(customer.created_at).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
             </p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>

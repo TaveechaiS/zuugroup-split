@@ -3,6 +3,7 @@ import { Router } from 'express'
 import { supabaseAdmin } from '../lib/supabase'
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth'
 import { asyncHandler } from '../middleware/errorHandler'
+import { logActivity } from '../lib/activityLog'
 import { z } from 'zod'
 
 const router = Router()
@@ -22,6 +23,14 @@ router.post('/login', asyncHandler(async (req, res) => {
   const { data: profile } = await supabaseAdmin
     .from('users').select('*, team:teams(id, name)').eq('id', data.user.id).single()
 
+  await logActivity({
+    userId: data.user.id,
+    action: 'login',
+    description: `เข้าสู่ระบบ (${profile?.email ?? data.user.email})`,
+    ipAddress: req.ip,
+    userAgent: req.headers['user-agent'] ?? null,
+  })
+
   res.json({
     session: data.session,
     user: profile,
@@ -31,6 +40,13 @@ router.post('/login', asyncHandler(async (req, res) => {
 /** POST /api/auth/logout - revoke session */
 router.post('/logout', requireAuth, asyncHandler(async (req: AuthenticatedRequest, res) => {
   await supabaseAdmin.auth.admin.signOut(req.user!.jwt)
+  await logActivity({
+    userId: req.user!.id,
+    action: 'logout',
+    description: `ออกจากระบบ (${req.user!.email})`,
+    ipAddress: req.ip,
+    userAgent: req.headers['user-agent'] ?? null,
+  })
   res.json({ success: true })
 }))
 

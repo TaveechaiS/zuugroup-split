@@ -20,7 +20,7 @@ export default function UserDetailClient({ user }: { user: any }) {
           <div><dt className="text-gray-500 text-xs">เบอร์โทรศัพท์</dt><dd className="text-gray-900 mt-0.5">{user.phone ?? '-'}</dd></div>
           <div><dt className="text-gray-500 text-xs">ทีม</dt><dd className="text-gray-900 mt-0.5">{user.team?.name ?? '-'}</dd></div>
           <div><dt className="text-gray-500 text-xs">สถานะ</dt><dd className="text-gray-900 mt-0.5">{user.is_active ? 'ใช้งาน' : 'ปิด'}</dd></div>
-          <div><dt className="text-gray-500 text-xs">วันที่สร้างบัญชี</dt><dd className="text-gray-900 mt-0.5">{new Date(user.created_at).toLocaleDateString('th-TH')}</dd></div>
+          <div><dt className="text-gray-500 text-xs">วันที่สร้างบัญชี</dt><dd className="text-gray-900 mt-0.5">{new Date(user.created_at).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</dd></div>
         </dl>
       </div>
     </div>

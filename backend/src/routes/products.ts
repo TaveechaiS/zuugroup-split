@@ -3,6 +3,7 @@ import { Router } from 'express'
 import { supabaseAdmin } from '../lib/supabase'
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/auth'
 import { asyncHandler } from '../middleware/errorHandler'
+import { logActivity } from '../lib/activityLog'
 import { z } from 'zod'
 
 const router = Router()
@@ -50,22 +51,44 @@ router.post('/', requireRole('admin'), asyncHandler(async (req: AuthenticatedReq
     .select('*, category:product_categories(id, name)')
     .single()
   if (error) throw error
+  await logActivity({
+    userId: req.user!.id,
+    action: 'product.create',
+    entityType: 'product',
+    entityId: data.id,
+    description: `สร้างสินค้า ${data.name} (จำนวน ${data.quantity}, ราคา ${data.price_per_unit})`,
+  })
   res.status(201).json({ data })
 }))
 
-router.patch('/:id', requireRole('admin'), asyncHandler(async (req, res) => {
+router.patch('/:id', requireRole('admin'), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const body = productSchema.partial().parse(req.body)
   const { data, error } = await supabaseAdmin
     .from('products').update({ ...body, updated_at: new Date().toISOString() })
     .eq('id', req.params.id)
     .select('*, category:product_categories(id, name)').single()
   if (error) throw error
+  await logActivity({
+    userId: req.user!.id,
+    action: 'product.update',
+    entityType: 'product',
+    entityId: data.id,
+    description: `แก้ไขสินค้า ${data.name}`,
+  })
   res.json({ data })
 }))
 
-router.delete('/:id', requireRole('admin'), asyncHandler(async (req, res) => {
+router.delete('/:id', requireRole('admin'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const { data: existing } = await supabaseAdmin.from('products').select('name').eq('id', req.params.id).single()
   const { error } = await supabaseAdmin.from('products').delete().eq('id', req.params.id)
   if (error) throw error
+  await logActivity({
+    userId: req.user!.id,
+    action: 'product.delete',
+    entityType: 'product',
+    entityId: req.params.id,
+    description: `ลบสินค้า ${existing?.name ?? req.params.id}`,
+  })
   res.json({ success: true })
 }))
 

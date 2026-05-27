@@ -38,7 +38,7 @@ export default function OrderReviewClient({ order }: { order: any }) {
           <div className="flex items-start justify-between mb-4">
             <div>
               <h2 className="text-lg font-bold text-gray-900">คำสั่งซื้อ {order.order_number}</h2>
-              <p className="text-sm text-gray-500 mt-1">{new Date(order.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+              <p className="text-sm text-gray-500 mt-1">{new Date(order.created_at).toLocaleString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
             </div>
             <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">รอตรวจสอบ</span>
           </div>

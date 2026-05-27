@@ -3,6 +3,7 @@ import { Router } from 'express'
 import { supabaseAdmin } from '../lib/supabase'
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/auth'
 import { asyncHandler } from '../middleware/errorHandler'
+import { logActivity } from '../lib/activityLog'
 import { z } from 'zod'
 
 const router = Router()
@@ -47,21 +48,43 @@ router.post('/', requireRole('admin'), asyncHandler(async (req: AuthenticatedReq
     .select()
     .single()
   if (error) throw error
+  await logActivity({
+    userId: req.user!.id,
+    action: 'customer.create',
+    entityType: 'customer',
+    entityId: data.id,
+    description: `เพิ่มลูกค้า ${data.company_name}`,
+  })
   res.status(201).json({ data })
 }))
 
-router.patch('/:id', requireRole('admin'), asyncHandler(async (req, res) => {
+router.patch('/:id', requireRole('admin'), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const body = customerSchema.partial().parse(req.body)
   const { data, error } = await supabaseAdmin
     .from('customers').update({ ...body, updated_at: new Date().toISOString() })
     .eq('id', req.params.id).select().single()
   if (error) throw error
+  await logActivity({
+    userId: req.user!.id,
+    action: 'customer.update',
+    entityType: 'customer',
+    entityId: data.id,
+    description: `แก้ไขลูกค้า ${data.company_name}`,
+  })
   res.json({ data })
 }))
 
-router.delete('/:id', requireRole('admin'), asyncHandler(async (req, res) => {
+router.delete('/:id', requireRole('admin'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const { data: existing } = await supabaseAdmin.from('customers').select('company_name').eq('id', req.params.id).single()
   const { error } = await supabaseAdmin.from('customers').delete().eq('id', req.params.id)
   if (error) throw error
+  await logActivity({
+    userId: req.user!.id,
+    action: 'customer.delete',
+    entityType: 'customer',
+    entityId: req.params.id,
+    description: `ลบลูกค้า ${existing?.company_name ?? req.params.id}`,
+  })
   res.json({ success: true })
 }))
 

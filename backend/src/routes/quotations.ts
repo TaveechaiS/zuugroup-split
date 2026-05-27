@@ -3,6 +3,7 @@ import { Router } from 'express'
 import { supabaseAdmin } from '../lib/supabase'
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/auth'
 import { asyncHandler } from '../middleware/errorHandler'
+import { logActivity } from '../lib/activityLog'
 import { z } from 'zod'
 
 const router = Router()
@@ -119,6 +120,14 @@ router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: Authe
   }))
   await supabaseAdmin.from('quotation_items').insert(items)
 
+  await logActivity({
+    userId: req.user!.id,
+    action: autoApprove ? 'quotation.create+auto_approve' : `quotation.create.${finalStatus}`,
+    entityType: 'quotation',
+    entityId: quotation.id,
+    description: `สร้างใบเสนอราคา ${quotation.quotation_number} (สถานะ: ${finalStatus}, ยอด ${total_amount})`,
+  })
+
   res.status(201).json({ data: quotation })
 }))
 
@@ -162,6 +171,14 @@ router.patch('/:id', requireRole('sales', 'manager', 'admin'), asyncHandler(asyn
   }))
   await supabaseAdmin.from('quotation_items').insert(items)
 
+  await logActivity({
+    userId: req.user!.id,
+    action: 'quotation.update',
+    entityType: 'quotation',
+    entityId: req.params.id,
+    description: `แก้ไขใบเสนอราคา ${existing.quotation_number} (สถานะ: ${body.status})`,
+  })
+
   res.json({ success: true })
 }))
 
@@ -194,6 +211,14 @@ router.post('/:id/approve', requireRole('manager', 'admin'), asyncHandler(async 
     related_entity_id: q.id,
   })
 
+  await logActivity({
+    userId: req.user!.id,
+    action: 'quotation.approve',
+    entityType: 'quotation',
+    entityId: q.id,
+    description: `อนุมัติใบเสนอราคา ${q.quotation_number}`,
+  })
+
   res.json({ success: true, data: updated })
 }))
 
@@ -214,6 +239,14 @@ router.post('/:id/reject', requireRole('manager', 'admin'), asyncHandler(async (
     type: 'error',
     related_entity_type: 'quotation',
     related_entity_id: q.id,
+  })
+
+  await logActivity({
+    userId: req.user!.id,
+    action: 'quotation.reject',
+    entityType: 'quotation',
+    entityId: q.id,
+    description: `ปฏิเสธใบเสนอราคา ${q.quotation_number}: ${reason}`,
   })
 
   res.json({ success: true })

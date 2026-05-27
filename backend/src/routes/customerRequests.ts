@@ -3,6 +3,7 @@ import { Router } from 'express'
 import { supabaseAdmin } from '../lib/supabase'
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/auth'
 import { asyncHandler } from '../middleware/errorHandler'
+import { logActivity } from '../lib/activityLog'
 import { z } from 'zod'
 
 const router = Router()
@@ -48,6 +49,13 @@ router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: Authe
     .insert({ ...body, requested_by: req.user!.id, status: 'pending' })
     .select().single()
   if (error) throw error
+  await logActivity({
+    userId: req.user!.id,
+    action: 'customer_request.create',
+    entityType: 'customer_request',
+    entityId: data.id,
+    description: `ส่งคำขอเพิ่มลูกค้า ${data.company_name}`,
+  })
   res.status(201).json({ data })
 }))
 
@@ -85,6 +93,14 @@ router.post('/:id/approve', requireRole('admin'), asyncHandler(async (req: Authe
     type: 'success',
   })
 
+  await logActivity({
+    userId: req.user!.id,
+    action: 'customer_request.approve',
+    entityType: 'customer_request',
+    entityId: req.params.id,
+    description: `อนุมัติคำขอเพิ่มลูกค้า ${request.company_name}`,
+  })
+
   res.json({ success: true })
 }))
 
@@ -107,6 +123,14 @@ router.post('/:id/reject', requireRole('admin'), asyncHandler(async (req: Authen
     title: 'คำขอเพิ่มลูกค้าถูกปฏิเสธ',
     message: `คำขอเพิ่ม "${request.company_name}" ถูกปฏิเสธ: ${reason}`,
     type: 'error',
+  })
+
+  await logActivity({
+    userId: req.user!.id,
+    action: 'customer_request.reject',
+    entityType: 'customer_request',
+    entityId: req.params.id,
+    description: `ปฏิเสธคำขอเพิ่มลูกค้า ${request.company_name}: ${reason}`,
   })
 
   res.json({ success: true })

@@ -3,6 +3,7 @@ import { Router } from 'express'
 import { supabaseAdmin } from '../lib/supabase'
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/auth'
 import { asyncHandler } from '../middleware/errorHandler'
+import { logActivity } from '../lib/activityLog'
 import { z } from 'zod'
 
 const router = Router()
@@ -89,6 +90,14 @@ router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: Authe
     }))
   )
 
+  await logActivity({
+    userId: req.user!.id,
+    action: autoApprove ? 'order.create+auto_approve' : 'order.create',
+    entityType: 'order',
+    entityId: order.id,
+    description: `สร้างคำสั่งซื้อ ${order.order_number} (สถานะ: ${finalStatus}, ยอด ${total})`,
+  })
+
   res.status(201).json({ data: order })
 }))
 
@@ -112,6 +121,14 @@ router.post('/:id/review-pass', requireRole('manager', 'admin'), asyncHandler(as
     related_entity_id: o.id,
   })
 
+  await logActivity({
+    userId: req.user!.id,
+    action: 'order.review_pass',
+    entityType: 'order',
+    entityId: o.id,
+    description: `อนุมัติการตรวจสอบคำสั่งซื้อ ${o.order_number}`,
+  })
+
   res.json({ success: true })
 }))
 
@@ -132,6 +149,14 @@ router.post('/:id/review-reject', requireRole('manager', 'admin'), asyncHandler(
     type: 'error',
     related_entity_type: 'order',
     related_entity_id: o.id,
+  })
+
+  await logActivity({
+    userId: req.user!.id,
+    action: 'order.review_reject',
+    entityType: 'order',
+    entityId: o.id,
+    description: `ปฏิเสธคำสั่งซื้อ ${o.order_number}: ${reason}`,
   })
 
   res.json({ success: true })
@@ -157,14 +182,30 @@ router.post('/:id/confirm', requireRole('admin'), asyncHandler(async (req: Authe
     related_entity_id: o.id,
   })
 
+  await logActivity({
+    userId: req.user!.id,
+    action: 'order.confirm',
+    entityType: 'order',
+    entityId: o.id,
+    description: `ยืนยันการขายคำสั่งซื้อ ${o.order_number}`,
+  })
+
   res.json({ success: true })
 }))
 
-router.post('/:id/cancel', requireRole('admin'), asyncHandler(async (req, res) => {
+router.post('/:id/cancel', requireRole('admin'), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { reason } = z.object({ reason: z.string().min(1) }).parse(req.body)
+  const { data: o } = await supabaseAdmin.from('orders').select('order_number').eq('id', req.params.id).single()
   await supabaseAdmin.from('orders').update({
     status: 'cancelled', reject_reason: reason,
   }).eq('id', req.params.id)
+  await logActivity({
+    userId: req.user!.id,
+    action: 'order.cancel',
+    entityType: 'order',
+    entityId: req.params.id,
+    description: `ยกเลิกคำสั่งซื้อ ${o?.order_number ?? req.params.id}: ${reason}`,
+  })
   res.json({ success: true })
 }))
 

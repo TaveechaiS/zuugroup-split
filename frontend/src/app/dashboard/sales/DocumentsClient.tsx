@@ -158,8 +158,8 @@ export default function DocumentsClient({ quotations, orders, basePath = '/dashb
                     {doc.statusInfo?.label ?? doc.status}
                   </span>
                 </td>
-                <td className="px-5 py-3.5 text-gray-500">
-                  {new Date(doc.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}
+                <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">
+                  {new Date(doc.created_at).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 </td>
                 <td className="px-5 py-3.5">
                   <div className="flex items-center justify-center gap-1">

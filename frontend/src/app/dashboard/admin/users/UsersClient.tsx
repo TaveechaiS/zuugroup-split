@@ -126,7 +126,7 @@ export default function UsersClient({ users, teams, onReload }: Props) {
               <div><span className="text-gray-500">ทีม:</span> <span className="font-medium">{viewing.team?.name ?? '-'}</span></div>
               <div><span className="text-gray-500">เบอร์โทร:</span> <span className="font-medium">{viewing.phone ?? '-'}</span></div>
               <div><span className="text-gray-500">สถานะ:</span> <span className="font-medium">{viewing.is_active ? 'ใช้งาน' : 'ปิด'}</span></div>
-              <div><span className="text-gray-500">วันที่สร้าง:</span> <span className="font-medium">{new Date(viewing.created_at).toLocaleDateString('th-TH')}</span></div>
+              <div><span className="text-gray-500">วันที่สร้าง:</span> <span className="font-medium">{new Date(viewing.created_at).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></div>
             </div>
             <div className="flex gap-2 justify-end pt-4 mt-4 border-t border-gray-100">
               <button onClick={() => startEdit(viewing)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">แก้ไข</button>

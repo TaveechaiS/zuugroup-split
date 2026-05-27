@@ -3,6 +3,7 @@ import { Router } from 'express'
 import { supabaseAdmin } from '../lib/supabase'
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/auth'
 import { asyncHandler } from '../middleware/errorHandler'
+import { logActivity } from '../lib/activityLog'
 import { z } from 'zod'
 
 const router = Router()
@@ -41,7 +42,7 @@ const createUserSchema = z.object({
 })
 
 /** POST /api/users - create (Admin) */
-router.post('/', requireRole('admin'), asyncHandler(async (req, res) => {
+router.post('/', requireRole('admin'), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const body = createUserSchema.parse(req.body)
 
   // Create auth user
@@ -73,6 +74,14 @@ router.post('/', requireRole('admin'), asyncHandler(async (req, res) => {
     return res.status(400).json({ error: profileError.message })
   }
 
+  await logActivity({
+    userId: req.user!.id,
+    action: 'user.create',
+    entityType: 'user',
+    entityId: profile.id,
+    description: `สร้างผู้ใช้ ${profile.first_name} ${profile.last_name} (${profile.email}) บทบาท: ${profile.role}`,
+  })
+
   res.status(201).json({ data: profile })
 }))
 
@@ -81,7 +90,7 @@ const updateUserSchema = createUserSchema.partial().omit({ email: true }).extend
 })
 
 /** PATCH /api/users/:id */
-router.patch('/:id', requireRole('admin'), asyncHandler(async (req, res) => {
+router.patch('/:id', requireRole('admin'), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const body = updateUserSchema.parse(req.body)
   const { password, ...rest } = body
 
@@ -94,16 +103,35 @@ router.patch('/:id', requireRole('admin'), asyncHandler(async (req, res) => {
     .from('users').update({ ...rest, updated_at: new Date().toISOString() })
     .eq('id', req.params.id).select().single()
   if (error) throw error
+
+  await logActivity({
+    userId: req.user!.id,
+    action: password ? 'user.update+password' : 'user.update',
+    entityType: 'user',
+    entityId: req.params.id,
+    description: `แก้ไขผู้ใช้ ${data.first_name} ${data.last_name}${password ? ' (เปลี่ยนรหัสผ่าน)' : ''}`,
+  })
+
   res.json({ data })
 }))
 
 /** DELETE /api/users/:id - soft delete (set is_active=false) */
-router.delete('/:id', requireRole('admin'), asyncHandler(async (req, res) => {
+router.delete('/:id', requireRole('admin'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const { data: existing } = await supabaseAdmin.from('users').select('first_name, last_name, email').eq('id', req.params.id).single()
   const { error } = await supabaseAdmin
     .from('users')
     .update({ is_active: false, updated_at: new Date().toISOString() })
     .eq('id', req.params.id)
   if (error) throw error
+
+  await logActivity({
+    userId: req.user!.id,
+    action: 'user.deactivate',
+    entityType: 'user',
+    entityId: req.params.id,
+    description: `ปิดการใช้งานผู้ใช้ ${existing?.first_name ?? ''} ${existing?.last_name ?? ''} (${existing?.email ?? req.params.id})`,
+  })
+
   res.json({ success: true })
 }))
 

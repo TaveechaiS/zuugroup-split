@@ -26,7 +26,7 @@ export default function CustomerRequestsClient({ requests }: { requests: any[] }
                 <td className="px-5 py-3.5 text-gray-600">{r.requester?.first_name} {r.requester?.last_name}</td>
                 <td className="px-5 py-3.5 text-gray-600">{r.contact_name ?? '-'}</td>
                 <td className="px-5 py-3.5 text-gray-600">{r.phone ?? '-'}</td>
-                <td className="px-5 py-3.5 text-gray-500">{new Date(r.created_at).toLocaleDateString('th-TH')}</td>
+                <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{new Date(r.created_at).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
                 <td className="px-5 py-3.5"><ChevronRight size={16} className="text-gray-400" /></td>
               </tr>
             ))}
