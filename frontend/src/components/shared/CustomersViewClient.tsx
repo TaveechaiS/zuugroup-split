@@ -11,9 +11,13 @@ export default function CustomersViewClient({ customers }: Props) {
   const [search, setSearch] = useState('')
   const [viewing, setViewing] = useState<any>(null)
 
-  const filtered = customers.filter((c) =>
-    `${c.company_name} ${c.contact_name} ${c.phone} ${c.address}`.toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = customers.filter((c) => {
+    const haystack = [
+      c.company_name, c.contact_name, c.phone, c.email,
+      c.address, c.drug_license_number,
+    ].filter(Boolean).join(' ').toLowerCase()
+    return haystack.includes(search.toLowerCase())
+  })
 
   return (
     <div className="p-6">
@@ -48,7 +52,9 @@ export default function CustomersViewClient({ customers }: Props) {
                   <td className="px-5 py-3.5 font-medium text-gray-900">{c.company_name}</td>
                   <td className="px-5 py-3.5 text-gray-600">{c.contact_name ?? '-'}</td>
                   <td className="px-5 py-3.5 text-gray-600">{c.phone ?? '-'}</td>
-                  <td className="px-5 py-3.5 text-gray-600 max-w-xs truncate">{c.address ?? '-'}</td>
+                  <td className="px-5 py-3.5 text-gray-600">
+                    <div className="max-w-[220px] truncate" title={c.address ?? ''}>{c.address ?? '-'}</div>
+                  </td>
                   <td className="px-5 py-3.5 text-center" onClick={(e) => e.stopPropagation()}>
                     <button onClick={() => setViewing(c)} className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs font-medium">
                       <Eye size={14} /> ดูรายละเอียด

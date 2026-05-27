@@ -17,7 +17,15 @@ export default function UsersClient({ users, teams, onReload }: Props) {
 
   const [form, setForm] = useState({ email: '', password: '', first_name: '', last_name: '', role: 'sales', team_id: '', phone: '' })
 
-  const filtered = users.filter((u) => `${u.first_name} ${u.last_name} ${u.email}`.toLowerCase().includes(search.toLowerCase()))
+  const filtered = users.filter((u) => {
+    const haystack = [
+      u.first_name, u.last_name, u.email, u.phone,
+      ROLE_LABELS[u.role], u.role,
+      u.team?.name,
+      u.is_active ? 'ใช้งาน active' : 'ปิด inactive',
+    ].filter(Boolean).join(' ').toLowerCase()
+    return haystack.includes(search.toLowerCase())
+  })
 
   const startAdd = () => {
     setEditing(null)

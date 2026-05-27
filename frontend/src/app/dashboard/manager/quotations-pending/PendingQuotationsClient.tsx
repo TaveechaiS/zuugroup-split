@@ -5,9 +5,14 @@ import { Search, ChevronRight } from 'lucide-react'
 
 export default function PendingQuotationsClient({ quotations }: { quotations: any[] }) {
   const [search, setSearch] = useState('')
-  const filtered = quotations.filter((q) =>
-    `${q.quotation_number} ${q.customer?.company_name} ${q.creator?.first_name}`.toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = quotations.filter((q) => {
+    const haystack = [
+      q.quotation_number, q.customer?.company_name,
+      q.creator?.first_name, q.creator?.last_name, q.creator?.email,
+      String(q.total_amount ?? ''),
+    ].filter(Boolean).join(' ').toLowerCase()
+    return haystack.includes(search.toLowerCase())
+  })
 
   return (
     <div className="p-4 sm:p-6">

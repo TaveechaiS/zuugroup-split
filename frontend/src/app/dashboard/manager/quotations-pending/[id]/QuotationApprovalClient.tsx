@@ -5,34 +5,51 @@ import { useRouter } from 'next/navigation'
 import { Check, X } from 'lucide-react'
 import { quotationsApi } from '@/lib/api/services'
 
+const STATUS_INFO: Record<string, { label: string; color: string }> = {
+  draft: { label: 'ฉบับร่าง', color: 'bg-gray-100 text-gray-700' },
+  pending: { label: 'รออนุมัติ', color: 'bg-yellow-100 text-yellow-700' },
+  approved: { label: 'อนุมัติแล้ว', color: 'bg-green-100 text-green-700' },
+  rejected: { label: 'ไม่อนุมัติ', color: 'bg-red-100 text-red-700' },
+}
+
 export default function QuotationApprovalClient({ quotation }: { quotation: any }) {
   const router = useRouter()
   const [showReject, setShowReject] = useState(false)
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [currentStatus, setCurrentStatus] = useState(quotation.status)
 
   const approve = async () => {
-    setSaving(true); setError('')
+    setSaving(true); setError(''); setSuccess('')
     try {
-      await quotationsApi.approve(quotation.id)
-      window.location.href = '/dashboard/manager/quotations-pending'
-    } catch (err: any) { setError(err.message); setSaving(false) }
+      const res = await quotationsApi.approve(quotation.id)
+      const newStatus = (res as any)?.data?.status ?? 'approved'
+      setCurrentStatus(newStatus)
+      setSuccess('อนุมัติเรียบร้อย')
+      setTimeout(() => { window.location.href = '/dashboard/manager/quotations-pending' }, 800)
+    } catch (err: any) { setError(err.message || 'อนุมัติไม่สำเร็จ'); setSaving(false) }
   }
 
   const reject = async () => {
     if (!reason.trim()) { setError('กรุณาระบุเหตุผล'); return }
-    setSaving(true); setError('')
+    setSaving(true); setError(''); setSuccess('')
     try {
       await quotationsApi.reject(quotation.id, reason)
-      window.location.href = '/dashboard/manager/quotations-pending'
-    } catch (err: any) { setError(err.message); setSaving(false) }
+      setCurrentStatus('rejected')
+      setSuccess('ปฏิเสธเรียบร้อย')
+      setTimeout(() => { window.location.href = '/dashboard/manager/quotations-pending' }, 800)
+    } catch (err: any) { setError(err.message || 'ปฏิเสธไม่สำเร็จ'); setSaving(false) }
   }
+
+  const statusInfo = STATUS_INFO[currentStatus] ?? { label: currentStatus, color: 'bg-gray-100 text-gray-700' }
 
   return (
     <div className="p-4 sm:p-6">
       <div className="max-w-5xl mx-auto space-y-5">
         {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
+        {success && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">{success}</div>}
 
         <div className="bg-white rounded-xl border border-gray-100 p-5">
           <div className="flex items-start justify-between mb-4">
@@ -40,7 +57,7 @@ export default function QuotationApprovalClient({ quotation }: { quotation: any 
               <h2 className="text-lg font-bold text-gray-900">ใบเสนอราคา {quotation.quotation_number}</h2>
               <p className="text-sm text-gray-500 mt-1">{new Date(quotation.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
             </div>
-            <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">รออนุมัติ</span>
+            <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>{statusInfo.label}</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
@@ -97,7 +114,12 @@ export default function QuotationApprovalClient({ quotation }: { quotation: any 
           </div>
         )}
 
-        {!showReject ? (
+        {currentStatus !== 'pending' ? (
+          <div className="bg-white rounded-xl border border-gray-100 p-5 text-center">
+            <p className="text-sm text-gray-600">สถานะปัจจุบัน: <span className="font-semibold">{statusInfo.label}</span></p>
+            <button onClick={() => router.push('/dashboard/manager/quotations-pending')} className="mt-3 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">กลับไปหน้ารายการ</button>
+          </div>
+        ) : !showReject ? (
           <div className="flex gap-3 justify-end">
             <button onClick={() => router.back()} className="px-5 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">ยกเลิก</button>
             <button onClick={() => setShowReject(true)} disabled={saving} className="px-5 py-2.5 border border-red-200 text-red-700 rounded-lg text-sm font-medium hover:bg-red-50 flex items-center gap-2 disabled:opacity-60"><X size={16} /> ไม่อนุมัติ</button>

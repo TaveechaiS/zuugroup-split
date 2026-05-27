@@ -14,7 +14,12 @@ export default function ProductsViewClient({ products }: Props) {
   const categories = Array.from(new Set(products.map((p) => p.category?.name).filter(Boolean)))
 
   const filtered = products.filter((p) => {
-    const matchSearch = `${p.name} ${p.category?.name ?? ''}`.toLowerCase().includes(search.toLowerCase())
+    const haystack = [
+      p.name, p.unit, p.category?.name,
+      p.status === 'available' ? 'พร้อมขาย available' : 'ไม่พร้อมขาย unavailable ปิด',
+      String(p.quantity ?? ''), String(p.price_per_unit ?? ''),
+    ].filter(Boolean).join(' ').toLowerCase()
+    const matchSearch = haystack.includes(search.toLowerCase())
     const matchCat = !category || p.category?.name === category
     return matchSearch && matchCat
   })

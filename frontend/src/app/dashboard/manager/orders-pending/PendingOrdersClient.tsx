@@ -5,9 +5,14 @@ import { Search, ChevronRight } from 'lucide-react'
 
 export default function PendingOrdersClient({ orders }: { orders: any[] }) {
   const [search, setSearch] = useState('')
-  const filtered = orders.filter((o) =>
-    `${o.order_number} ${o.customer?.company_name} ${o.creator?.first_name}`.toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = orders.filter((o) => {
+    const haystack = [
+      o.order_number, o.customer?.company_name,
+      o.creator?.first_name, o.creator?.last_name, o.creator?.email,
+      String(o.total_amount ?? ''),
+    ].filter(Boolean).join(' ').toLowerCase()
+    return haystack.includes(search.toLowerCase())
+  })
 
   return (
     <div className="p-4 sm:p-6">

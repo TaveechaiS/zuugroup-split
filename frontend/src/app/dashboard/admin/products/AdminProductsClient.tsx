@@ -17,7 +17,14 @@ export default function AdminProductsClient({ products, categories, onReload }: 
 
   const [form, setForm] = useState({ name: '', quantity: 0, price_per_unit: 0, category_id: '', unit: '', image_url: '', status: 'available' })
 
-  const filtered = products.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()))
+  const filtered = products.filter((p) => {
+    const haystack = [
+      p.name, p.unit, p.category?.name,
+      p.status === 'available' ? 'พร้อมขาย available' : 'ปิดการขาย unavailable ปิด',
+      String(p.quantity ?? ''), String(p.price_per_unit ?? ''),
+    ].filter(Boolean).join(' ').toLowerCase()
+    return haystack.includes(search.toLowerCase())
+  })
 
   const startAdd = () => { setEditing(null); setForm({ name: '', quantity: 0, price_per_unit: 0, category_id: '', unit: '', image_url: '', status: 'available' }); setShowForm(true); setError('') }
   const startEdit = (p: any) => { setEditing(p); setForm({ name: p.name, quantity: p.quantity, price_per_unit: p.price_per_unit, category_id: p.category_id ?? '', unit: p.unit ?? '', image_url: p.image_url ?? '', status: p.status }); setShowForm(true); setError('') }

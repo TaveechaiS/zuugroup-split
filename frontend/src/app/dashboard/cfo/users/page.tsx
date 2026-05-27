@@ -14,7 +14,15 @@ export default function CFOUsersPage() {
 
   useEffect(() => { usersApi.list().then(setUsers) }, [])
 
-  const filtered = users.filter((u) => `${u.first_name} ${u.last_name} ${u.email}`.toLowerCase().includes(search.toLowerCase()))
+  const filtered = users.filter((u) => {
+    const haystack = [
+      u.first_name, u.last_name, u.email, u.phone,
+      ROLE_LABELS[u.role], u.role,
+      u.team?.name,
+      u.is_active ? 'ใช้งาน active' : 'ปิด inactive',
+    ].filter(Boolean).join(' ').toLowerCase()
+    return haystack.includes(search.toLowerCase())
+  })
 
   return (
     <div className="flex flex-col h-full">

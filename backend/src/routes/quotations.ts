@@ -170,11 +170,20 @@ router.post('/:id/approve', requireRole('manager', 'admin'), asyncHandler(async 
   const { data: q } = await supabaseAdmin.from('quotations').select('*').eq('id', req.params.id).single()
   if (!q) return res.status(404).json({ error: 'Not found' })
 
-  await supabaseAdmin.from('quotations').update({
+  const { data: updated, error: updateError } = await supabaseAdmin.from('quotations').update({
     status: 'approved',
     approved_by: req.user!.id,
     approved_at: new Date().toISOString(),
-  }).eq('id', req.params.id)
+    updated_at: new Date().toISOString(),
+  }).eq('id', req.params.id).select().single()
+
+  if (updateError) {
+    console.error('Quotation approve update error:', updateError)
+    return res.status(500).json({ error: `อนุมัติไม่สำเร็จ: ${updateError.message}` })
+  }
+  if (!updated || updated.status !== 'approved') {
+    return res.status(500).json({ error: 'อนุมัติไม่สำเร็จ - ไม่สามารถเปลี่ยนสถานะได้' })
+  }
 
   await supabaseAdmin.from('notifications').insert({
     user_id: q.created_by,
@@ -185,7 +194,7 @@ router.post('/:id/approve', requireRole('manager', 'admin'), asyncHandler(async 
     related_entity_id: q.id,
   })
 
-  res.json({ success: true })
+  res.json({ success: true, data: updated })
 }))
 
 /** POST /api/quotations/:id/reject */

@@ -35,7 +35,16 @@ export default function DocumentsClient({ quotations, orders, basePath = '/dashb
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .filter((d) => tab === 'all' || d.type === tab)
       .filter((d) => statusFilter === 'all' || d.status === statusFilter)
-      .filter((d) => `${d.number} ${d.customer?.company_name}`.toLowerCase().includes(search.toLowerCase()))
+      .filter((d) => {
+        const haystack = [
+          d.number, d.customer?.company_name,
+          d.creator?.first_name, d.creator?.last_name,
+          d.statusInfo?.label, d.status,
+          d.type === 'quotation' ? 'ใบเสนอราคา quotation' : 'คำสั่งซื้อ order',
+          String(d.total_amount ?? ''),
+        ].filter(Boolean).join(' ').toLowerCase()
+        return haystack.includes(search.toLowerCase())
+      })
   }, [tab, search, statusFilter, quotations, orders])
 
   const statusOptions = useMemo(() => {

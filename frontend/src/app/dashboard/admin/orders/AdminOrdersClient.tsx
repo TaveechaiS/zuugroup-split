@@ -19,7 +19,15 @@ export default function AdminOrdersClient({ orders }: { orders: any[] }) {
 
   const filtered = orders
     .filter((o) => statusFilter === 'all' || o.status === statusFilter)
-    .filter((o) => `${o.order_number} ${o.customer?.company_name}`.toLowerCase().includes(search.toLowerCase()))
+    .filter((o) => {
+      const haystack = [
+        o.order_number, o.customer?.company_name,
+        o.creator?.first_name, o.creator?.last_name,
+        STATUS[o.status]?.label, o.status,
+        String(o.total_amount ?? ''),
+      ].filter(Boolean).join(' ').toLowerCase()
+      return haystack.includes(search.toLowerCase())
+    })
 
   return (
     <div className="p-4 sm:p-6">
