@@ -1,9 +1,22 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react'
 import { login, forgotPassword } from '@/lib/api/auth'
+
+const REMEMBERED_EMAIL_KEY = 'zuugroup_remembered_email'
+const REMEMBERED_PASS_KEY = 'zuugroup_remembered_pass'  // base64-encoded password (opt-in via "จดจำฉัน")
+
+// Simple base64 wrapper (not encryption — only obfuscation so password
+// isn't sitting in localStorage as plain text). The user opted in by
+// checking "จดจำฉัน" so we trade convenience for security here.
+const encode = (s: string) => {
+  try { return btoa(unescape(encodeURIComponent(s))) } catch { return '' }
+}
+const decode = (s: string) => {
+  try { return decodeURIComponent(escape(atob(s))) } catch { return '' }
+}
 
 export default function LoginPage() {
   const router = useRouter()
@@ -17,6 +30,23 @@ export default function LoginPage() {
   const [forgotEmail, setForgotEmail] = useState('')
   const [forgotMsg, setForgotMsg] = useState('')
 
+  // Restore on mount
+  useEffect(() => {
+    try {
+      const savedEmail = localStorage.getItem(REMEMBERED_EMAIL_KEY)
+      if (savedEmail) setEmail(savedEmail)
+
+      const savedPass = localStorage.getItem(REMEMBERED_PASS_KEY)
+      if (savedPass) {
+        const pw = decode(savedPass)
+        if (pw) {
+          setPassword(pw)
+          setRemember(true)  // only tick "remember" when the password was actually stored
+        }
+      }
+    } catch { /* ignore */ }
+  }, [])
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
@@ -28,6 +58,13 @@ export default function LoginPage() {
         setLoading(false)
         return
       }
+      // Always remember email (user wants only email kept by default).
+      // Remember password ONLY when "จดจำฉัน" is checked.
+      try {
+        localStorage.setItem(REMEMBERED_EMAIL_KEY, email)
+        if (remember) localStorage.setItem(REMEMBERED_PASS_KEY, encode(password))
+        else localStorage.removeItem(REMEMBERED_PASS_KEY)
+      } catch { /* ignore */ }
       const role = res.user.role
       router.push(`/dashboard/${role}`)
     } catch (err: any) {
@@ -42,8 +79,9 @@ export default function LoginPage() {
     setForgotMsg('')
     try {
       await forgotPassword(forgotEmail)
-      setForgotMsg('ส่งลิงก์รีเซ็ตรหัสผ่านไปยังอีเมลของคุณแล้ว')
+      setForgotMsg('✅ ส่งลิงก์รีเซ็ตรหัสผ่านไปยังอีเมลของคุณแล้ว ตรวจสอบกล่องจดหมาย (หรือ Spam)')
     } catch (err: any) {
+      // Backend returns Thai-friendly message for 429 / rate-limit cases
       setForgotMsg(err.message || 'ไม่สามารถส่งอีเมลได้')
     }
   }
@@ -52,11 +90,14 @@ export default function LoginPage() {
     <div className="min-h-screen flex">
       {/* Left brand panel */}
       <div className="hidden md:flex flex-col justify-between bg-[#2563EB] text-white p-12 w-1/2">
-        <div>
-          <h1 className="text-3xl font-bold">ZUUGROUP</h1>
-          <p className="text-blue-100 mt-1 text-sm">ระบบจัดการตัวแทนขายยา</p>
+        <div className="flex items-center gap-3">
+          <img src="/images/logo.png" alt="ZUUGROUP" className="w-12 h-12 object-contain shrink-0" />
+          <div>
+            <h1 className="text-3xl font-bold leading-none">ZUUGROUP</h1>
+            <p className="text-blue-100 mt-1 text-sm">ระบบจัดการตัวแทนขายยา</p>
+          </div>
         </div>
-        <div>
+        <div className="text-center">
           <h2 className="text-3xl font-bold leading-tight">
             ยินดีต้อนรับสู่<br />ZUUGROUP
           </h2>
@@ -71,6 +112,11 @@ export default function LoginPage() {
       {/* Right form panel */}
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-md">
+          {/* Mobile logo */}
+          <div className="md:hidden flex items-center gap-2 mb-6">
+            <img src="/images/logo.png" alt="ZUUGROUP" className="w-10 h-10" />
+            <h1 className="text-xl font-bold text-[#2563EB]">ZUUGROUP</h1>
+          </div>
           {!forgotMode ? (
             <>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">เข้าสู่ระบบ</h2>

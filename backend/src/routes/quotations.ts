@@ -74,7 +74,7 @@ router.get('/', asyncHandler(async (req: AuthenticatedRequest, res) => {
 router.get('/:id', asyncHandler(async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from('quotations')
-    .select('*, customer:customers(*), creator:users!created_by(first_name, last_name, email), items:quotation_items(*, product:products(name, unit))')
+    .select('*, customer:customers(*), creator:users!created_by(first_name, last_name, email), items:quotation_items(*, product:products(name, unit, image_url))')
     .eq('id', req.params.id).single()
   if (error) return res.status(404).json({ error: 'Not found' })
   res.json({ data })

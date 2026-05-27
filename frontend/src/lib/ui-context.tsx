@@ -6,18 +6,26 @@ interface UIContextValue {
   mobileSidebarOpen: boolean
   openMobileSidebar: () => void
   closeMobileSidebar: () => void
+
+  sidebarCollapsed: boolean
+  toggleSidebar: () => void
+  setSidebarCollapsed: (v: boolean) => void
 }
 
 const UIContext = createContext<UIContextValue | null>(null)
 
 export function UIProvider({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
   return (
     <UIContext.Provider
       value={{
-        mobileSidebarOpen: open,
-        openMobileSidebar: () => setOpen(true),
-        closeMobileSidebar: () => setOpen(false),
+        mobileSidebarOpen: mobileOpen,
+        openMobileSidebar: () => setMobileOpen(true),
+        closeMobileSidebar: () => setMobileOpen(false),
+        sidebarCollapsed: collapsed,
+        toggleSidebar: () => setCollapsed((v) => !v),
+        setSidebarCollapsed: setCollapsed,
       }}
     >
       {children}

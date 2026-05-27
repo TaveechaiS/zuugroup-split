@@ -28,13 +28,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Only redirect when the user lands on ANOTHER role's dashboard ROOT
+    // (e.g. /dashboard/sales for a manager). Sub-pages like
+    // /dashboard/sales/quotations/{id} are accessible cross-role
+    // because the backend enforces permissions.
+    const segs = pathname.split('/').filter(Boolean)  // ['dashboard', '<role>', ...]
+    const segRole = segs[1]
+    const isRoleRoot = segs.length === 2
+
     const stored = currentUser()
     if (stored) {
       setUser(stored)
       setLoading(false)
-      const segs = pathname.split('/')
-      const segRole = segs[2]
-      if (segRole && segRole !== stored.role) {
+      if (isRoleRoot && segRole && segRole !== stored.role) {
         router.push(`/dashboard/${stored.role}`)
       }
     }
@@ -45,7 +51,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }
       setUser(u)
       setLoading(false)
-      if (!pathname.includes(`/dashboard/${u.role}`)) {
+      if (isRoleRoot && segRole && segRole !== u.role) {
         router.push(`/dashboard/${u.role}`)
       }
     })

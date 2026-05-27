@@ -1,8 +1,10 @@
 'use client'
 
+import { useState } from 'react'
 import { ArrowLeft, Download, Edit2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { generateQuotationPdf } from '@/lib/pdf/documentPdf'
+import { generateQuotationPdf, buildQuotationHtml, type DocData } from '@/lib/pdf/documentPdf'
+import PdfPreviewModal from '@/components/shared/PdfPreviewModal'
 
 const STATUS: Record<string, { label: string; color: string }> = {
   draft: { label: 'ฉบับร่าง', color: 'bg-gray-100 text-gray-700' },
@@ -15,38 +17,38 @@ interface Props { quotation: any }
 
 export default function QuotationViewClient({ quotation }: Props) {
   const router = useRouter()
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null)
   const s = STATUS[quotation.status] ?? { label: quotation.status, color: 'bg-gray-100' }
 
-  const download = () => {
-    const blob = generateQuotationPdf({
-      number: quotation.quotation_number,
-      date: new Date(quotation.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' }),
-      customer: {
-        company_name: quotation.customer?.company_name ?? '-',
-        address: quotation.customer?.address,
-        contact_name: quotation.customer?.contact_name,
-        phone: quotation.customer?.phone,
-        email: quotation.customer?.email,
-      },
-      items: (quotation.items ?? []).map((it: any) => ({
-        name: it.product?.name ?? '-',
-        quantity: it.quantity,
-        unit: it.product?.unit,
-        unit_price: it.negotiated_price ?? it.unit_price,
-        total_price: it.total_price,
-      })),
-      subtotal: quotation.subtotal,
-      vat_percent: quotation.vat_percent,
-      vat_amount: quotation.vat_amount,
-      total_amount: quotation.total_amount,
-      notes: quotation.notes,
-      contract_period_days: quotation.contract_period_days,
-    })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = `${quotation.quotation_number}.pdf`; a.click()
-    URL.revokeObjectURL(url)
-  }
+  const buildData = (): DocData => ({
+    number: quotation.quotation_number,
+    createdAt: quotation.created_at,
+    customer: {
+      company_name: quotation.customer?.company_name ?? '-',
+      address: quotation.customer?.address,
+      contact_name: quotation.customer?.contact_name,
+      phone: quotation.customer?.phone,
+      email: quotation.customer?.email,
+      drug_license_number: quotation.customer?.drug_license_number,
+    },
+    creator: quotation.creator,
+    items: (quotation.items ?? []).map((it: any) => ({
+      name: it.product?.name ?? '-',
+      quantity: it.quantity,
+      unit: it.product?.unit,
+      unit_price: it.negotiated_price ?? it.unit_price,
+      total_price: it.total_price,
+      image_url: it.product?.image_url,
+    })),
+    subtotal: quotation.subtotal,
+    vat_percent: quotation.vat_percent,
+    vat_amount: quotation.vat_amount,
+    total_amount: quotation.total_amount,
+    notes: quotation.notes,
+    contract_period_days: quotation.contract_period_days,
+  })
+
+  const download = () => setPreviewHtml(buildQuotationHtml(buildData()))
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -134,6 +136,14 @@ export default function QuotationViewClient({ quotation }: Props) {
           </div>
         )}
       </div>
+
+      <PdfPreviewModal
+        html={previewHtml}
+        filename={`${quotation.quotation_number}.pdf`}
+        title={`ใบเสนอราคา ${quotation.quotation_number}`}
+        onClose={() => setPreviewHtml(null)}
+        generatePdf={() => generateQuotationPdf(buildData())}
+      />
     </div>
   )
 }

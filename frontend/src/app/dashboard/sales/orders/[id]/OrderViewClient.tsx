@@ -1,7 +1,9 @@
 'use client'
 
+import { useState } from 'react'
 import { ArrowLeft, Download } from 'lucide-react'
-import { generateOrderPdf } from '@/lib/pdf/documentPdf'
+import { generateOrderPdf, buildOrderHtml, type DocData } from '@/lib/pdf/documentPdf'
+import PdfPreviewModal from '@/components/shared/PdfPreviewModal'
 
 const STATUS: Record<string, { label: string; color: string }> = {
   pending_review: { label: 'รอตรวจสอบ', color: 'bg-yellow-100 text-yellow-700' },
@@ -14,33 +16,33 @@ const STATUS: Record<string, { label: string; color: string }> = {
 interface Props { order: any }
 
 export default function OrderViewClient({ order }: Props) {
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null)
   const s = STATUS[order.status] ?? { label: order.status, color: 'bg-gray-100' }
 
-  const download = () => {
-    const blob = generateOrderPdf({
-      number: order.order_number,
-      date: new Date(order.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' }),
-      customer: {
-        company_name: order.customer?.company_name ?? '-',
-        address: order.customer?.address,
-        contact_name: order.customer?.contact_name,
-        phone: order.customer?.phone,
-        email: order.customer?.email,
-      },
-      items: (order.items ?? []).map((it: any) => ({
-        name: it.product?.name ?? '-',
-        quantity: it.quantity,
-        unit: it.product?.unit,
-        unit_price: it.unit_price,
-        total_price: it.total_price,
-      })),
-      total_amount: order.total_amount,
-    })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = `${order.order_number}.pdf`; a.click()
-    URL.revokeObjectURL(url)
-  }
+  const buildData = (): DocData => ({
+    number: order.order_number,
+    createdAt: order.created_at,
+    customer: {
+      company_name: order.customer?.company_name ?? '-',
+      address: order.customer?.address,
+      contact_name: order.customer?.contact_name,
+      phone: order.customer?.phone,
+      email: order.customer?.email,
+      drug_license_number: order.customer?.drug_license_number,
+    },
+    creator: order.creator,
+    items: (order.items ?? []).map((it: any) => ({
+      name: it.product?.name ?? '-',
+      quantity: it.quantity,
+      unit: it.product?.unit,
+      unit_price: it.unit_price,
+      total_price: it.total_price,
+      image_url: it.product?.image_url,
+    })),
+    total_amount: order.total_amount,
+  })
+
+  const download = () => setPreviewHtml(buildOrderHtml(buildData()))
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -111,6 +113,14 @@ export default function OrderViewClient({ order }: Props) {
           </div>
         )}
       </div>
+
+      <PdfPreviewModal
+        html={previewHtml}
+        filename={`${order.order_number}.pdf`}
+        title={`คำสั่งซื้อ ${order.order_number}`}
+        onClose={() => setPreviewHtml(null)}
+        generatePdf={() => generateOrderPdf(buildData())}
+      />
     </div>
   )
 }

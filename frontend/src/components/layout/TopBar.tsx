@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Bell, Search, Menu } from 'lucide-react'
+import { Bell, Search, Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { notificationsApi } from '@/lib/api/services'
 import { useUI } from '@/lib/ui-context'
 
@@ -11,7 +11,7 @@ export default function TopBar({ title }: Props) {
   const [notifications, setNotifications] = useState<any[]>([])
   const [showNotif, setShowNotif] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
-  const { openMobileSidebar } = useUI()
+  const { openMobileSidebar, sidebarCollapsed, toggleSidebar } = useUI()
 
   const loadNotifications = async () => {
     try { setNotifications(await notificationsApi.list()) } catch { /* ignore */ }
@@ -39,6 +39,16 @@ export default function TopBar({ title }: Props) {
         aria-label="เปิดเมนู"
       >
         <Menu size={20} className="text-gray-600" />
+      </button>
+
+      {/* Desktop sidebar toggle (before title) */}
+      <button
+        onClick={toggleSidebar}
+        className="hidden lg:flex w-8 h-8 items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 shrink-0"
+        aria-label={sidebarCollapsed ? 'ขยายเมนู' : 'ย่อเมนู'}
+        title={sidebarCollapsed ? 'ขยายเมนู' : 'ย่อเมนู'}
+      >
+        {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
       </button>
 
       <h2 className="text-base sm:text-lg font-semibold text-gray-900 truncate flex-1 lg:flex-initial">{title}</h2>

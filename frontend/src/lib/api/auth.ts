@@ -48,6 +48,10 @@ export async function forgotPassword(email: string) {
   return api.post("/auth/forgot-password", { email });
 }
 
+export async function resetPassword(access_token: string, new_password: string) {
+  return api.post("/auth/reset-password", { access_token, new_password });
+}
+
 export async function fetchMe() {
   try {
     const res = await api.get("/auth/me");

@@ -1,7 +1,7 @@
 'use client'
 
-import { FileText, ShoppingCart, Clock, AlertCircle, DollarSign, TrendingUp } from 'lucide-react'
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import { FileText, ShoppingCart, Clock, AlertCircle, DollarSign } from 'lucide-react'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
 interface Props {
   stats: {
@@ -11,25 +11,16 @@ interface Props {
     pendingOrders: number
     rejectedCount: number
     totalSales: number
+    monthlyData?: { month: string; orders: number; revenue: number }[]
+    statusBreakdown?: { name: string; value: number; color: string }[]
   }
 }
 
-const MONTHLY_DATA = [
-  { month: 'ม.ค.', sales: 120000 },
-  { month: 'ก.พ.', sales: 145000 },
-  { month: 'มี.ค.', sales: 175000 },
-  { month: 'เม.ย.', sales: 230000 },
-  { month: 'พ.ค.', sales: 198000 },
-  { month: 'มิ.ย.', sales: 265000 },
-]
-
-const STATUS_DATA = [
-  { name: 'อนุมัติ', value: 45, color: '#10b981' },
-  { name: 'รอ', value: 12, color: '#f59e0b' },
-  { name: 'ไม่อนุมัติ', value: 5, color: '#ef4444' },
-]
-
 export default function ManagerDashboardClient({ stats }: Props) {
+  const monthlyData = (stats.monthlyData ?? []).map((m) => ({ month: m.month, sales: m.revenue }))
+  const statusData = stats.statusBreakdown ?? []
+  const hasMonthly = monthlyData.some((m) => m.sales > 0)
+  const hasStatus = statusData.length > 0
   const cards = [
     { label: 'ใบเสนอราคาทั้งหมด', value: stats.teamQuotationCount, icon: <FileText size={20} />, color: 'bg-blue-50 text-blue-600' },
     { label: 'คำสั่งซื้อทั้งหมด', value: stats.teamOrderCount, icon: <ShoppingCart size={20} />, color: 'bg-purple-50 text-purple-600' },
@@ -57,39 +48,48 @@ export default function ManagerDashboardClient({ stats }: Props) {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="bg-white rounded-xl border border-gray-100 p-5 lg:col-span-2">
-          <h3 className="font-semibold text-gray-900 mb-4">ยอดขายของทีม</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-gray-900">ยอดขายของทีม (6 เดือนล่าสุด)</h3>
+            {!hasMonthly && <span className="text-xs text-gray-400">ยังไม่มียอดขาย</span>}
+          </div>
           <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={MONTHLY_DATA}>
+            <LineChart data={monthlyData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} />
+              <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)} />
               <Tooltip formatter={(v: number) => [`฿${v.toLocaleString()}`, 'ยอดขาย']} />
-              <Line type="monotone" dataKey="sales" stroke="#2563EB" strokeWidth={2.5} dot={{ r: 4 }} />
+              <Line type="monotone" dataKey="sales" stroke="#2563EB" strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
 
         <div className="bg-white rounded-xl border border-gray-100 p-5">
           <h3 className="font-semibold text-gray-900 mb-4">สถานะใบเสนอราคา</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <PieChart>
-              <Pie data={STATUS_DATA} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value">
-                {STATUS_DATA.map((entry, idx) => <Cell key={idx} fill={entry.color} />)}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="space-y-1.5">
-            {STATUS_DATA.map((s) => (
-              <div key={s.name} className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-full" style={{ background: s.color }} />
-                  <span className="text-gray-600">{s.name}</span>
-                </div>
-                <span className="font-medium text-gray-900">{s.value}</span>
+          {hasStatus ? (
+            <>
+              <ResponsiveContainer width="100%" height={200}>
+                <PieChart>
+                  <Pie data={statusData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value">
+                    {statusData.map((entry, idx) => <Cell key={idx} fill={entry.color} />)}
+                  </Pie>
+                  <Tooltip formatter={(v: number, _n, p: any) => [v, p?.payload?.name]} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="space-y-1.5 mt-2">
+                {statusData.map((s) => (
+                  <div key={s.name} className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full" style={{ background: s.color }} />
+                      <span className="text-gray-600">{s.name}</span>
+                    </div>
+                    <span className="font-medium text-gray-900">{s.value.toLocaleString()}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          ) : (
+            <div className="text-center text-gray-400 text-sm py-12">ยังไม่มีใบเสนอราคา</div>
+          )}
         </div>
       </div>
     </div>

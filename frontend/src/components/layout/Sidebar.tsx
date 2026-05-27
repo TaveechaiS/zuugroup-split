@@ -1,14 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, FileText, FileBarChart, FolderOpen, ShoppingCart,
   Users, UserPlus, Package, UsersRound, ClipboardList, Activity,
-  FilePlus, Plus, LogOut, ChevronLeft, ChevronRight, X,
+  FilePlus, Plus, LogOut, X,
 } from 'lucide-react'
 import { logout } from '@/lib/api/auth'
+import { useUI } from '@/lib/ui-context'
 
 interface Props {
   role: 'admin' | 'manager' | 'sales' | 'cfo'
@@ -66,7 +67,7 @@ const ROLE_LABELS: Record<string, string> = {
 }
 
 export default function Sidebar({ role, user, mobileOpen, onMobileClose }: Props) {
-  const [collapsed, setCollapsed] = useState(false)
+  const { sidebarCollapsed: collapsed } = useUI()
   const pathname = usePathname()
   const router = useRouter()
   const items = NAV[role] ?? []
@@ -99,30 +100,31 @@ export default function Sidebar({ role, user, mobileOpen, onMobileClose }: Props
           w-64
         `}
       >
-        {/* Logo */}
-        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-          {!collapsed && (
-            <div>
-              <h1 className="text-lg font-bold text-[#2563EB]">ZUUGROUP</h1>
-              <p className="text-xs text-gray-500">{ROLE_LABELS[role]}</p>
+        {/* Logo / Header (toggle button lives in TopBar) */}
+        <div className="border-b border-gray-100">
+          {collapsed ? (
+            <div className="flex justify-center py-4">
+              <img src="/images/logo.png" alt="ZUUGROUP" className="w-9 h-9 object-contain" />
+            </div>
+          ) : (
+            <div className="p-4 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <img src="/images/logo.png" alt="ZUUGROUP" className="w-9 h-9 object-contain shrink-0" />
+                <div className="min-w-0">
+                  <h1 className="text-base font-bold text-[#2563EB] leading-tight">ZUUGROUP</h1>
+                  <p className="text-xs text-gray-500 truncate">{ROLE_LABELS[role]}</p>
+                </div>
+              </div>
+              {/* Mobile close — keep only on mobile drawer */}
+              <button
+                onClick={onMobileClose}
+                className="lg:hidden p-1.5 hover:bg-gray-100 rounded-lg shrink-0 text-gray-500"
+                aria-label="ปิดเมนู"
+              >
+                <X size={18} />
+              </button>
             </div>
           )}
-          {/* Mobile: close button */}
-          <button
-            onClick={onMobileClose}
-            className="lg:hidden p-1.5 hover:bg-gray-100 rounded-lg"
-            aria-label="ปิดเมนู"
-          >
-            <X size={18} />
-          </button>
-          {/* Desktop: collapse toggle */}
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="hidden lg:block p-1.5 hover:bg-gray-100 rounded-lg"
-            aria-label={collapsed ? 'ขยาย' : 'ย่อ'}
-          >
-            {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-          </button>
         </div>
 
         {/* Nav */}

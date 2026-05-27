@@ -7,7 +7,7 @@ interface Props {
   stats: { quotationCount: number; orderCount: number; totalSales: number; customerCount: number }
   topProducts: { name: string; quantity: number; sales: number }[]
   topCustomers: { name: string; sales: number }[]
-  monthlyData: { month: string; sales: number }[]
+  monthlyData: { month: string; sales: number; orders?: number }[]
   teams: { id: string; name: string }[]
 }
 
@@ -38,14 +38,17 @@ export default function CFODashboardClient({ stats, topProducts, topCustomers, m
 
       {/* Monthly sales */}
       <div className="bg-white rounded-xl border border-gray-100 p-5">
-        <h3 className="font-semibold text-gray-900 mb-4">ยอดขายรายเดือน</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-gray-900">ยอดขายรายเดือน (6 เดือนล่าสุด)</h3>
+          {!monthlyData.some((m) => m.sales > 0) && <span className="text-xs text-gray-400">ยังไม่มียอดขาย</span>}
+        </div>
         <ResponsiveContainer width="100%" height={280}>
           <LineChart data={monthlyData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-            <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} />
+            <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)} />
             <Tooltip formatter={(v: number) => [`฿${v.toLocaleString()}`, 'ยอดขาย']} />
-            <Line type="monotone" dataKey="sales" stroke="#2563EB" strokeWidth={2.5} dot={{ r: 4 }} />
+            <Line type="monotone" dataKey="sales" stroke="#2563EB" strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} />
           </LineChart>
         </ResponsiveContainer>
       </div>

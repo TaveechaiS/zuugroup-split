@@ -1,16 +1,7 @@
 'use client'
 
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend } from 'recharts'
 import { Users, Building2, Package, UsersRound, ShoppingCart, AlertTriangle, Clock, UserPlus } from 'lucide-react'
-
-const MONTHLY_DATA = [
-  { month: 'ม.ค.', orders: 12, revenue: 185000 },
-  { month: 'ก.พ.', orders: 19, revenue: 220000 },
-  { month: 'มี.ค.', orders: 15, revenue: 195000 },
-  { month: 'เม.ย.', orders: 22, revenue: 310000 },
-  { month: 'พ.ค.', orders: 28, revenue: 390000 },
-  { month: 'มิ.ย.', orders: 24, revenue: 345000 },
-]
 
 interface Props {
   stats: {
@@ -23,10 +14,17 @@ interface Props {
     pendingCustomerRequests: number
     lowStockProducts: any[]
     recentOrders: any[]
+    monthlyData?: { month: string; orders: number; revenue: number }[]
+    statusBreakdown?: { name: string; value: number; color: string }[]
   }
 }
 
 export default function AdminDashboardClient({ stats }: Props) {
+  const monthlyData = stats.monthlyData ?? []
+  const statusBreakdown = stats.statusBreakdown ?? []
+  const hasMonthlyData = monthlyData.some((m) => m.orders > 0 || m.revenue > 0)
+  const hasStatusData = statusBreakdown.length > 0
+
   const statCards = [
     { label: 'ผู้ใช้ทั้งหมด', value: stats.userCount, icon: <Users size={20} />, color: 'blue', href: '/dashboard/admin/users' },
     { label: 'ลูกค้า', value: stats.customerCount, icon: <Building2 size={20} />, color: 'green', href: '/dashboard/admin/customers' },
@@ -82,32 +80,66 @@ export default function AdminDashboardClient({ stats }: Props) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Revenue Line Chart */}
         <div className="bg-white rounded-xl border border-gray-100 p-5">
-          <h3 className="font-semibold text-gray-900 mb-4">ยอดขายรายเดือน</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={MONTHLY_DATA}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-gray-900">ยอดขายรายเดือน (6 เดือนล่าสุด)</h3>
+            {!hasMonthlyData && <span className="text-xs text-gray-400">ยังไม่มีคำสั่งซื้อ</span>}
+          </div>
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={monthlyData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} />
+              <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)} />
               <Tooltip formatter={(v: number) => [`฿${v.toLocaleString()}`, 'ยอดขาย']} />
-              <Line type="monotone" dataKey="revenue" stroke="#2563EB" strokeWidth={2} dot={{ r: 4 }} />
+              <Line type="monotone" dataKey="revenue" stroke="#2563EB" strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
 
         {/* Orders Bar Chart */}
         <div className="bg-white rounded-xl border border-gray-100 p-5">
-          <h3 className="font-semibold text-gray-900 mb-4">จำนวนคำสั่งซื้อรายเดือน</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={MONTHLY_DATA}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-gray-900">จำนวนคำสั่งซื้อรายเดือน</h3>
+            {!hasMonthlyData && <span className="text-xs text-gray-400">ยังไม่มีคำสั่งซื้อ</span>}
+          </div>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={monthlyData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
               <Tooltip formatter={(v: number) => [v, 'คำสั่งซื้อ']} />
               <Bar dataKey="orders" fill="#2563EB" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
+
+      {/* Status Breakdown */}
+      {hasStatusData && (
+        <div className="bg-white rounded-xl border border-gray-100 p-5">
+          <h3 className="font-semibold text-gray-900 mb-4">สถานะคำสั่งซื้อ</h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie data={statusBreakdown} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={2} dataKey="value">
+                  {statusBreakdown.map((s, i) => <Cell key={i} fill={s.color} />)}
+                </Pie>
+                <Tooltip formatter={(v: number, _n, p: any) => [v, p?.payload?.name]} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="space-y-2 self-center">
+              {statusBreakdown.map((s) => (
+                <div key={s.name} className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full" style={{ background: s.color }} />
+                    <span className="text-gray-700">{s.name}</span>
+                  </div>
+                  <span className="font-semibold text-gray-900">{s.value.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bottom Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

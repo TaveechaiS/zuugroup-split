@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Download, Eye, Edit2 } from 'lucide-react'
-import { generateQuotationPdf, generateOrderPdf } from '@/lib/pdf/documentPdf'
+import { Search, Download, Eye, Edit2, X, FileText } from 'lucide-react'
+import { generateQuotationPdf, generateOrderPdf, buildQuotationHtml, buildOrderHtml, type DocData } from '@/lib/pdf/documentPdf'
 import { quotationsApi, ordersApi } from '@/lib/api/services'
+import PdfPreviewModal from '@/components/shared/PdfPreviewModal'
 
 const Q_STATUS: Record<string, { label: string; color: string }> = {
   draft: { label: 'ฉบับร่าง', color: 'bg-gray-100 text-gray-700' },
@@ -27,6 +28,22 @@ export default function DocumentsClient({ quotations, orders, basePath = '/dashb
   const [tab, setTab] = useState<'all' | 'quotation' | 'order'>('all')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [previewPdf, setPreviewPdf] = useState<{ html: string; filename: string; title: string; data: DocData; isQuotation: boolean } | null>(null)
+  const [viewing, setViewing] = useState<any>(null)
+  const [viewingFull, setViewingFull] = useState<any>(null)
+  const [viewingLoading, setViewingLoading] = useState(false)
+
+  const openDetail = async (doc: any) => {
+    setViewing(doc)
+    setViewingFull(null)
+    setViewingLoading(true)
+    try {
+      const full = doc.type === 'quotation' ? await quotationsApi.get(doc.id) : await ordersApi.get(doc.id)
+      setViewingFull(full)
+    } finally {
+      setViewingLoading(false)
+    }
+  }
 
   const combined = useMemo(() => {
     const q = quotations.map((x) => ({ ...x, type: 'quotation' as const, number: x.quotation_number, statusInfo: Q_STATUS[x.status] }))
@@ -56,46 +73,58 @@ export default function DocumentsClient({ quotations, orders, basePath = '/dashb
     ]
   }, [tab])
 
+  const [pdfBusy, setPdfBusy] = useState(false)
+
   const exportToPDF = async (doc: any) => {
-    const isQuotation = doc.type === 'quotation'
-    const full = isQuotation ? await quotationsApi.get(doc.id) : await ordersApi.get(doc.id)
+    setPdfBusy(true)
+    try {
+      const isQuotation = doc.type === 'quotation'
+      const full = isQuotation ? await quotationsApi.get(doc.id) : await ordersApi.get(doc.id)
 
-    const pdfData = {
-      number: doc.number,
-      date: new Date(doc.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' }),
-      customer: {
-        company_name: full.customer?.company_name ?? '-',
-        address: full.customer?.address,
-        contact_name: full.customer?.contact_name,
-        phone: full.customer?.phone,
-        email: full.customer?.email,
-      },
-      items: (full.items ?? []).map((it: any) => ({
-        name: it.product?.name ?? '-',
-        quantity: it.quantity,
-        unit: it.product?.unit,
-        unit_price: it.negotiated_price ?? it.unit_price,
-        total_price: it.total_price,
-      })),
-      subtotal: full.subtotal,
-      vat_percent: full.vat_percent,
-      vat_amount: full.vat_amount,
-      total_amount: full.total_amount,
-      notes: full.notes,
-      contract_period_days: full.contract_period_days,
+      const pdfData = {
+        number: doc.number,
+        createdAt: doc.created_at,
+        customer: {
+          company_name: full.customer?.company_name ?? '-',
+          address: full.customer?.address,
+          contact_name: full.customer?.contact_name,
+          phone: full.customer?.phone,
+          email: full.customer?.email,
+          drug_license_number: full.customer?.drug_license_number,
+        },
+        creator: full.creator,
+        items: (full.items ?? []).map((it: any) => ({
+          name: it.product?.name ?? '-',
+          quantity: it.quantity,
+          unit: it.product?.unit,
+          unit_price: it.negotiated_price ?? it.unit_price,
+          total_price: it.total_price,
+          image_url: it.product?.image_url,
+        })),
+        subtotal: full.subtotal,
+        vat_percent: full.vat_percent,
+        vat_amount: full.vat_amount,
+        total_amount: full.total_amount,
+        notes: full.notes,
+        contract_period_days: full.contract_period_days,
+      }
+
+      const html = isQuotation ? buildQuotationHtml(pdfData) : buildOrderHtml(pdfData)
+      setPreviewPdf({
+        html,
+        filename: `${doc.number}.pdf`,
+        title: `${isQuotation ? 'ใบเสนอราคา' : 'คำสั่งซื้อ'} ${doc.number}`,
+        data: pdfData,
+        isQuotation,
+      })
+    } catch (err: any) {
+      console.error('exportToPDF failed:', err)
+      alert('สร้าง PDF ไม่สำเร็จ: ' + (err?.message ?? 'unknown error'))
+    } finally {
+      setPdfBusy(false)
     }
-
-    const blob = isQuotation ? generateQuotationPdf(pdfData) : generateOrderPdf(pdfData)
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = `${doc.number}.pdf`; a.click()
-    URL.revokeObjectURL(url)
   }
 
-  const openDetail = (doc: any) => {
-    const route = doc.type === 'quotation' ? 'quotations' : 'orders'
-    window.open(`${basePath}/${route}/${doc.id}`, '_blank')
-  }
 
   const editDraft = (doc: any) => {
     if (doc.type === 'quotation') router.push(`/dashboard/sales/quotations/${doc.id}/edit`)
@@ -183,6 +212,201 @@ export default function DocumentsClient({ quotations, orders, basePath = '/dashb
           </tbody>
         </table></div>
       </div>
+
+      <PdfPreviewModal
+        html={previewPdf?.html ?? null}
+        filename={previewPdf?.filename ?? 'document.pdf'}
+        title={previewPdf?.title}
+        onClose={() => setPreviewPdf(null)}
+        generatePdf={async () => {
+          if (!previewPdf) throw new Error('no preview data')
+          return previewPdf.isQuotation
+            ? await generateQuotationPdf(previewPdf.data)
+            : await generateOrderPdf(previewPdf.data)
+        }}
+      />
+
+      {viewing && (
+        <DocumentDetailModal
+          doc={viewing}
+          full={viewingFull}
+          loading={viewingLoading}
+          onClose={() => { setViewing(null); setViewingFull(null) }}
+          onExportPDF={() => exportToPDF(viewing)}
+        />
+      )}
+
+      {pdfBusy && (
+        <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center">
+          <div className="bg-white rounded-xl px-6 py-5 flex items-center gap-3 shadow-xl">
+            <div className="w-6 h-6 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+            <p className="text-sm text-gray-700">กำลังสร้าง PDF…</p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DocumentDetailModal({ doc, full, loading, onClose, onExportPDF }: {
+  doc: any; full: any; loading: boolean; onClose: () => void; onExportPDF: () => void
+}) {
+  const isQuotation = doc.type === 'quotation'
+  const items = full?.items ?? []
+  const typeLabel = isQuotation ? 'ใบเสนอราคา' : 'คำสั่งซื้อ'
+  const typeColor = isQuotation ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'
+
+  // Esc to close + lock body scroll
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey) }
+  }, [onClose])
+
+  return (
+    <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${typeColor}`}>
+              <FileText size={20} />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-semibold text-gray-900 truncate text-base">{typeLabel} {doc.number}</h3>
+                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${doc.statusInfo?.color ?? 'bg-gray-100'}`}>
+                  {doc.statusInfo?.label ?? doc.status}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                {new Date(doc.created_at).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                {(doc.creator?.first_name || doc.creator?.last_name) && ` · โดย ${doc.creator?.first_name ?? ''} ${doc.creator?.last_name ?? ''}`}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 shrink-0" aria-label="ปิด">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+          {loading && (
+            <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+              <div className="w-10 h-10 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-3" />
+              <p className="text-sm">กำลังโหลดข้อมูล...</p>
+            </div>
+          )}
+
+          {!loading && full && (
+            <>
+              {/* Customer */}
+              <section>
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">ข้อมูลลูกค้า</h4>
+                <div className="bg-gray-50 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-2.5 text-sm">
+                  <Field label="บริษัท" value={full.customer?.company_name} />
+                  <Field label="ผู้ติดต่อ" value={full.customer?.contact_name} />
+                  <Field label="เบอร์โทรศัพท์" value={full.customer?.phone} />
+                  <Field label="อีเมล" value={full.customer?.email} />
+                  <Field label="ที่อยู่" value={full.customer?.address} className="sm:col-span-2" />
+                </div>
+              </section>
+
+              {/* Items */}
+              <section>
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">รายการสินค้า ({items.length} รายการ)</h4>
+                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
+                          <th className="text-left px-4 py-2.5 font-medium">สินค้า</th>
+                          <th className="text-right px-4 py-2.5 font-medium">จำนวน</th>
+                          <th className="text-right px-4 py-2.5 font-medium">ราคา/หน่วย</th>
+                          <th className="text-right px-4 py-2.5 font-medium">รวม</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {items.map((it: any) => (
+                          <tr key={it.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-gray-900">{it.product?.name ?? '-'}</td>
+                            <td className="px-4 py-3 text-right text-gray-700">{it.quantity} {it.product?.unit ?? ''}</td>
+                            <td className="px-4 py-3 text-right text-gray-700">฿{(it.negotiated_price ?? it.unit_price)?.toLocaleString()}</td>
+                            <td className="px-4 py-3 text-right text-gray-900 font-medium">฿{it.total_price?.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </section>
+
+              {/* Totals */}
+              <section className="flex justify-end">
+                <div className="bg-blue-50 rounded-xl p-4 min-w-[260px] space-y-1.5 text-sm">
+                  {full.subtotal !== undefined && (
+                    <div className="flex justify-between text-gray-600">
+                      <span>ยอดก่อน VAT</span><span>฿{full.subtotal?.toLocaleString()}</span>
+                    </div>
+                  )}
+                  {full.vat_amount !== undefined && (
+                    <div className="flex justify-between text-gray-600">
+                      <span>VAT ({full.vat_percent ?? 7}%)</span><span>฿{full.vat_amount?.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between pt-1.5 border-t border-blue-200 text-base font-semibold text-gray-900">
+                    <span>ยอดสุทธิ</span><span>฿{full.total_amount?.toLocaleString()}</span>
+                  </div>
+                </div>
+              </section>
+
+              {/* Notes / Contract / Reject */}
+              {(full.notes || full.contract_period_days || full.reject_reason) && (
+                <section className="space-y-2 text-sm">
+                  {full.contract_period_days && (
+                    <div className="bg-gray-50 rounded-lg px-3 py-2">
+                      <span className="text-gray-500">ระยะเวลาสัญญา: </span>
+                      <span className="text-gray-900">{full.contract_period_days} วัน</span>
+                    </div>
+                  )}
+                  {full.notes && (
+                    <div className="bg-gray-50 rounded-lg px-3 py-2">
+                      <span className="text-gray-500">หมายเหตุ: </span>
+                      <span className="text-gray-900 whitespace-pre-wrap">{full.notes}</span>
+                    </div>
+                  )}
+                  {full.reject_reason && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-red-700">
+                      <span className="font-medium">เหตุผลที่ปฏิเสธ: </span>
+                      <span className="whitespace-pre-wrap">{full.reject_reason}</span>
+                    </div>
+                  )}
+                </section>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer actions */}
+        <div className="flex items-center justify-end gap-2 px-6 py-3 border-t border-gray-100 bg-gray-50">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg font-medium">ปิด</button>
+          <button onClick={onExportPDF} disabled={loading || !full} className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm">
+            <Download size={15} /> ดูตัวอย่าง PDF
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Field({ label, value, className }: { label: string; value: any; className?: string }) {
+  return (
+    <div className={className}>
+      <p className="text-xs text-gray-500 mb-0.5">{label}</p>
+      <p className="text-gray-900 whitespace-pre-wrap break-words">{value || '-'}</p>
     </div>
   )
 }
