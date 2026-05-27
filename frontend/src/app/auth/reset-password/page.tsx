@@ -73,7 +73,7 @@ export default function ResetPasswordPage() {
       {/* Left brand panel — same as login */}
       <div className="hidden md:flex flex-col justify-between bg-[#2563EB] text-white p-12 w-1/2">
         <div className="flex items-center gap-3">
-          <img src="/images/logo.png" alt="ZUUGROUP" className="w-12 h-12 object-contain shrink-0" />
+          <img src="/images/logo-white.png" alt="ZUUGROUP" className="w-14 h-14 object-contain shrink-0" />
           <div>
             <h1 className="text-3xl font-bold leading-none">ZUUGROUP</h1>
             <p className="text-blue-100 mt-1 text-sm">ระบบจัดการตัวแทนขายยา</p>
