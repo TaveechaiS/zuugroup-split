@@ -98,6 +98,7 @@ export default function OrderViewClient({ order }: Props) {
           <div className="overflow-x-auto"><table className="w-full text-sm min-w-[640px]">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100">
+                <th className="text-center px-3 py-2.5 text-xs font-medium text-gray-500 w-12">#</th>
                 <th className="text-left px-5 py-2.5 text-xs font-medium text-gray-500">สินค้า</th>
                 <th className="text-right px-5 py-2.5 text-xs font-medium text-gray-500">จำนวน</th>
                 <th className="text-right px-5 py-2.5 text-xs font-medium text-gray-500">ราคา</th>
@@ -105,8 +106,9 @@ export default function OrderViewClient({ order }: Props) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {(order.items ?? []).map((item: any) => (
+              {(order.items ?? []).map((item: any, i: number) => (
                 <tr key={item.id}>
+                  <td className="px-3 py-3 text-center text-gray-500 text-xs font-mono">{i + 1}</td>
                   <td className="px-5 py-3 text-gray-900">{item.product?.name}</td>
                   <td className="px-5 py-3 text-right text-gray-700">{item.quantity} {item.product?.unit}</td>
                   <td className="px-5 py-3 text-right text-gray-700">฿{item.unit_price?.toLocaleString()}</td>

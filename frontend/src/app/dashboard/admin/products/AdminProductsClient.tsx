@@ -49,6 +49,7 @@ export default function AdminProductsClient({ products, categories, onReload }: 
     setShowForm(true); setError('')
   }
 
+
   const handleFile = (file: File) => {
     if (file.size > 2 * 1024 * 1024) { setError('ไฟล์ใหญ่เกิน 2MB'); return }
     const reader = new FileReader()
@@ -161,7 +162,23 @@ export default function AdminProductsClient({ products, categories, onReload }: 
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">วันผลิต</label>
-                  <input type="date" value={form.manufacture_date} onChange={(e) => setForm({ ...form, manufacture_date: e.target.value })}
+                  <input type="date" value={form.manufacture_date}
+                    onChange={(e) => {
+                      const mfg = e.target.value
+                      // Auto-set expiry to mfg + 3 years (user can adjust afterward)
+                      let expiry = form.expiry_date
+                      if (mfg) {
+                        const d = new Date(mfg)
+                        if (!isNaN(d.getTime())) {
+                          d.setFullYear(d.getFullYear() + 3)
+                          const y = d.getFullYear()
+                          const m = String(d.getMonth() + 1).padStart(2, '0')
+                          const day = String(d.getDate()).padStart(2, '0')
+                          expiry = `${y}-${m}-${day}`
+                        }
+                      }
+                      setForm({ ...form, manufacture_date: mfg, expiry_date: expiry })
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>

@@ -62,6 +62,7 @@ export default function OrderReviewClient({ order }: { order: any }) {
           <div className="overflow-x-auto"><table className="w-full text-sm min-w-[640px]">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-100 text-xs text-gray-500 uppercase">
+                <th className="text-center px-3 py-2.5 w-12">#</th>
                 <th className="text-left px-5 py-2.5">สินค้า</th>
                 <th className="text-right px-5 py-2.5">จำนวน</th>
                 <th className="text-right px-5 py-2.5">ราคา/หน่วย</th>
@@ -69,8 +70,9 @@ export default function OrderReviewClient({ order }: { order: any }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {(order.items ?? []).map((it: any) => (
+              {(order.items ?? []).map((it: any, i: number) => (
                 <tr key={it.id}>
+                  <td className="px-3 py-3 text-center text-gray-500 text-xs font-mono">{i + 1}</td>
                   <td className="px-5 py-3 text-gray-900">{it.product?.name}</td>
                   <td className="px-5 py-3 text-right">{it.quantity} {it.product?.unit ?? ''}</td>
                   <td className="px-5 py-3 text-right">฿{it.unit_price.toLocaleString()}</td>
