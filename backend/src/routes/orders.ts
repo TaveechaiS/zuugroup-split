@@ -1,5 +1,6 @@
 // src/routes/orders.ts
 import { Router } from 'express'
+import { translateError } from '../lib/translateError'
 import { supabaseAdmin } from '../lib/supabase'
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/auth'
 import { asyncHandler } from '../middleware/errorHandler'
@@ -20,7 +21,13 @@ const createSchema = z.object({
   customer_id: z.string().uuid(),
   items: z.array(itemSchema).min(1),
   vat_percent: z.number().nonnegative().optional(),
+  include_vat: z.boolean().default(true),
+  discount_percent: z.number().min(0).max(100).default(0),
+  discount_amount: z.number().nonnegative().default(0),
+  other_label: z.string().optional().nullable(),
+  other_amount: z.number().default(0),
   notes: z.string().optional(),
+  status: z.enum(['draft', 'pending_review']).default('pending_review'),
 })
 
 router.get('/', asyncHandler(async (req: AuthenticatedRequest, res) => {
@@ -63,22 +70,58 @@ router.get('/:id', asyncHandler(async (req, res) => {
 
 router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const body = createSchema.parse(req.body)
-  const subtotal = body.items.reduce((s, i) => s + i.unit_price * i.quantity, 0)
-  const vat_percent = body.vat_percent ?? 7
-  const vat_amount = +(subtotal * vat_percent / 100).toFixed(2)
-  const total = +(subtotal + vat_amount).toFixed(2)
+  const isDraft = body.status === 'draft'
 
-  // Manager-created orders skip review workflow and go straight to processing
+  // === Stock validation (skip for drafts) ===
+  if (!isDraft) {
+    const productIds = body.items.map((i) => i.product_id)
+    const { data: stockRows } = await supabaseAdmin
+      .from('products').select('id, name, quantity, unit').in('id', productIds)
+    const stockMap = new Map((stockRows ?? []).map((p: any) => [p.id, p]))
+    const insufficient = body.items
+      .map((i) => {
+        const p = stockMap.get(i.product_id)
+        return p && i.quantity > p.quantity
+          ? { name: p.name, requested: i.quantity, available: p.quantity, unit: p.unit ?? '' }
+          : null
+      })
+      .filter(Boolean) as Array<{ name: string; requested: number; available: number; unit: string }>
+
+    if (insufficient.length > 0) {
+      return res.status(400).json({
+        error: 'จำนวนสินค้าไม่เพียงพอ',
+        detail: insufficient,
+      })
+    }
+  }
+
+  const itemsSubtotal = body.items.reduce((s, i) => s + i.unit_price * i.quantity, 0)
+  const vat_percent = body.vat_percent ?? 7
+
+  const discountByPct = (itemsSubtotal * body.discount_percent) / 100
+  const totalDiscount = +(discountByPct + body.discount_amount).toFixed(2)
+  const afterDiscount = Math.max(0, itemsSubtotal - totalDiscount)
+  const vat_amount = body.include_vat ? +(afterDiscount * vat_percent / 100).toFixed(2) : 0
+  const total = +(afterDiscount + vat_amount + body.other_amount).toFixed(2)
+
+  // New workflow: every order ends at admin confirming → 'completed'.
+  // Manager creating an order still goes to pending_review (admin will confirm).
+  // Manager just gets the reviewed_by/at stamps set as if they reviewed it.
   const autoApprove = req.user!.role === 'manager'
-  const finalStatus = autoApprove ? 'processing' : 'pending_review'
+  const finalStatus = isDraft ? 'draft' : 'pending_review'
 
   const { data: order, error } = await supabaseAdmin
     .from('orders')
     .insert({
       customer_id: body.customer_id,
       created_by: req.user!.id,
-      subtotal,
+      subtotal: itemsSubtotal,
       vat_percent,
+      include_vat: body.include_vat,
+      discount_percent: body.discount_percent,
+      discount_amount: body.discount_amount,
+      other_label: body.other_label,
+      other_amount: body.other_amount,
       vat_amount,
       total_amount: total,
       notes: body.notes ?? null,
@@ -119,11 +162,11 @@ router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: Authe
       entityId: order.id,
     })
   }
-  // Always notify admins of new orders that reach "processing" — they confirm sale
-  if (finalStatus === 'processing') {
+  // Manager-created orders also notify admins so they can confirm the sale
+  if (autoApprove && finalStatus === 'pending_review') {
     await notifyRole('admin', {
-      title: 'มีคำสั่งซื้อรอยืนยันการขาย',
-      message: `คำสั่งซื้อ ${order.order_number} (฿${total.toLocaleString()}) พร้อมให้ยืนยันการขาย`,
+      title: 'มีคำสั่งซื้อรอยืนยันการขาย (จากผู้จัดการ)',
+      message: `ผู้จัดการสร้างคำสั่งซื้อ ${order.order_number} (฿${total.toLocaleString()}) — พร้อมยืนยันการขาย`,
       type: 'info',
       entityType: 'order',
       entityId: order.id,
@@ -201,6 +244,30 @@ router.post('/:id/review-reject', requireRole('manager', 'admin'), asyncHandler(
   })
 
   res.json({ success: true })
+}))
+
+/** PATCH /api/orders/:id - admin can edit order_number and notes only */
+router.patch('/:id', requireRole('admin'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const schema = z.object({
+    order_number: z.string().min(1).optional(),
+    notes: z.string().optional().nullable(),
+  })
+  const body = schema.parse(req.body)
+
+  const { data, error } = await supabaseAdmin
+    .from('orders')
+    .update({ ...body, updated_at: new Date().toISOString() })
+    .eq('id', req.params.id).select().single()
+  if (error) return res.status(400).json({ error: translateError(error.message) })
+
+  await logActivity({
+    userId: req.user!.id,
+    action: 'order.edit_meta',
+    entityType: 'order',
+    entityId: req.params.id,
+    description: `แก้ไขข้อมูลคำสั่งซื้อ ${data.order_number}`,
+  })
+  res.json({ data })
 }))
 
 /** POST /api/orders/:id/confirm - admin marks complete (triggers stock decrement) */

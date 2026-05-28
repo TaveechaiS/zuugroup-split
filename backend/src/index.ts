@@ -21,6 +21,7 @@ import dashboardRoutes from './routes/dashboard'
 import reportRoutes from './routes/reports'
 import activityLogRoutes from './routes/activityLogs'
 import badgeRoutes from './routes/badges'
+import zoneRoutes from './routes/zones'
 
 const app = express()
 const PORT = Number(process.env.PORT ?? 4000)
@@ -76,6 +77,7 @@ app.use('/api/dashboard', dashboardRoutes)
 app.use('/api/reports', reportRoutes)
 app.use('/api/activity-logs', activityLogRoutes)
 app.use('/api/badges', badgeRoutes)
+app.use('/api/zones', zoneRoutes)
 
 // 404
 app.use((_req, res) => res.status(404).json({ error: 'Not Found' }))

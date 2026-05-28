@@ -1,5 +1,6 @@
 // src/routes/auth.ts
 import { Router } from 'express'
+import { translateError } from '../lib/translateError'
 import { supabaseAdmin } from '../lib/supabase'
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth'
 import { asyncHandler } from '../middleware/errorHandler'
@@ -17,7 +18,7 @@ const loginSchema = z.object({
 router.post('/login', asyncHandler(async (req, res) => {
   const { email, password } = loginSchema.parse(req.body)
   const { data, error } = await supabaseAdmin.auth.signInWithPassword({ email, password })
-  if (error) return res.status(401).json({ error: error.message })
+  if (error) return res.status(401).json({ error: translateError(error.message) })
 
   // Load profile + check active
   const { data: profile } = await supabaseAdmin
@@ -135,7 +136,7 @@ router.post('/forgot-password', asyncHandler(async (req, res) => {
         error: 'ระบบส่งอีเมลถูกจำกัดชั่วคราว กรุณารอประมาณ 60 นาที หรือติดต่อผู้ดูแลระบบเพื่อเพิ่ม SMTP custom',
       })
     }
-    return res.status(400).json({ error: error.message })
+    return res.status(400).json({ error: translateError(error.message) })
   }
 
   res.json({ success: true })

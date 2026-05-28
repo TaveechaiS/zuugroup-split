@@ -1,13 +1,14 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { ArrowLeft, Download } from 'lucide-react'
 import { generateOrderPdf, buildOrderHtml, type DocData } from '@/lib/pdf/documentPdf'
 import PdfPreviewModal from '@/components/shared/PdfPreviewModal'
 
 const STATUS: Record<string, { label: string; color: string }> = {
   pending_review: { label: 'รอตรวจสอบ', color: 'bg-yellow-100 text-yellow-700' },
-  processing: { label: 'กำลังดำเนินการ', color: 'bg-blue-100 text-blue-700' },
+  processing: { label: 'รอยืนยันการขาย', color: 'bg-blue-100 text-blue-700' },
   completed: { label: 'สำเร็จ', color: 'bg-green-100 text-green-700' },
   cancelled: { label: 'ยกเลิก', color: 'bg-gray-100 text-gray-700' },
   rejected: { label: 'ไม่ผ่าน', color: 'bg-red-100 text-red-700' },
@@ -16,6 +17,7 @@ const STATUS: Record<string, { label: string; color: string }> = {
 interface Props { order: any }
 
 export default function OrderViewClient({ order }: Props) {
+  const router = useRouter()
   const [previewHtml, setPreviewHtml] = useState<string | null>(null)
   const s = STATUS[order.status] ?? { label: order.status, color: 'bg-gray-100' }
 
@@ -42,6 +44,11 @@ export default function OrderViewClient({ order }: Props) {
     subtotal: order.subtotal,
     vat_percent: order.vat_percent,
     vat_amount: order.vat_amount,
+    include_vat: order.include_vat,
+    discount_percent: order.discount_percent,
+    discount_amount: order.discount_amount,
+    other_label: order.other_label,
+    other_amount: order.other_amount,
     total_amount: order.total_amount,
     notes: order.notes,
   })
@@ -53,7 +60,13 @@ export default function OrderViewClient({ order }: Props) {
       <div className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={() => window.close()} className="p-2 hover:bg-gray-100 rounded-lg"><ArrowLeft size={18} /></button>
+            <button
+              onClick={() => {
+                if (typeof window !== 'undefined' && window.history.length > 1) router.back()
+                else router.push('/dashboard/sales')
+              }}
+              title="ย้อนกลับ"
+              className="p-2 hover:bg-gray-100 rounded-lg"><ArrowLeft size={18} /></button>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="font-bold text-gray-900">คำสั่งซื้อ {order.order_number}</h1>

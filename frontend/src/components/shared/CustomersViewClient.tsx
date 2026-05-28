@@ -13,8 +13,9 @@ export default function CustomersViewClient({ customers }: Props) {
 
   const filtered = customers.filter((c) => {
     const haystack = [
-      c.company_name, c.contact_name, c.phone, c.email,
-      c.address, c.drug_license_number,
+      c.customer_code, c.company_name, c.contact_name, c.phone, c.email,
+      c.address, c.drug_license_number, c.tax_id,
+      c.zone?.code, c.zone?.name, c.zone?.province, c.zone?.region,
     ].filter(Boolean).join(' ').toLowerCase()
     return haystack.includes(search.toLowerCase())
   })

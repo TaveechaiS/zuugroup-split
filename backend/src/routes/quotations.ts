@@ -1,5 +1,6 @@
 // src/routes/quotations.ts
 import { Router } from 'express'
+import { translateError } from '../lib/translateError'
 import { supabaseAdmin } from '../lib/supabase'
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/auth'
 import { asyncHandler } from '../middleware/errorHandler'
@@ -20,11 +21,34 @@ const itemSchema = z.object({
 const createSchema = z.object({
   customer_id: z.string().uuid(),
   vat_percent: z.number().nonnegative().default(7),
+  include_vat: z.boolean().default(true),
+  discount_percent: z.number().min(0).max(100).default(0),
+  discount_amount: z.number().nonnegative().default(0),
+  other_label: z.string().optional().nullable(),
+  other_amount: z.number().default(0),
   contract_period_days: z.number().int().nonnegative().nullable().optional(),
   notes: z.string().optional(),
   status: z.enum(['draft', 'pending']).default('pending'),
   items: z.array(itemSchema).min(1),
 })
+
+/** Compute totals given line items + document-level adjustments. */
+function computeTotals(opts: {
+  itemsSubtotal: number
+  include_vat: boolean
+  vat_percent: number
+  discount_percent: number
+  discount_amount: number
+  other_amount: number
+}) {
+  const { itemsSubtotal, include_vat, vat_percent } = opts
+  const discountByPct = (itemsSubtotal * opts.discount_percent) / 100
+  const totalDiscount = +(discountByPct + opts.discount_amount).toFixed(2)
+  const afterDiscount = Math.max(0, itemsSubtotal - totalDiscount)
+  const vat_amount = include_vat ? +(afterDiscount * vat_percent / 100).toFixed(2) : 0
+  const total_amount = +(afterDiscount + vat_amount + opts.other_amount).toFixed(2)
+  return { subtotal: itemsSubtotal, discount: totalDiscount, vat_amount, total_amount }
+}
 
 /** Filter helpers based on role */
 async function getRoleFilter(user: AuthenticatedRequest['user']) {
@@ -84,9 +108,16 @@ router.get('/:id', asyncHandler(async (req, res) => {
 /** POST /api/quotations - sales/manager create */
 router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const body = createSchema.parse(req.body)
-  const subtotal = body.items.reduce((s, i) => s + (i.negotiated_price ?? i.unit_price) * i.quantity, 0)
-  const vat_amount = (subtotal * body.vat_percent) / 100
-  const total_amount = subtotal + vat_amount
+  const itemsSubtotal = body.items.reduce((s, i) => s + (i.negotiated_price ?? i.unit_price) * i.quantity, 0)
+  const totals = computeTotals({
+    itemsSubtotal,
+    include_vat: body.include_vat,
+    vat_percent: body.vat_percent,
+    discount_percent: body.discount_percent,
+    discount_amount: body.discount_amount,
+    other_amount: body.other_amount,
+  })
+  const { subtotal, vat_amount, total_amount } = totals
 
   // Manager-created quotations skip approval workflow
   const autoApprove = req.user!.role === 'manager' && body.status === 'pending'
@@ -98,6 +129,11 @@ router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: Authe
       customer_id: body.customer_id,
       created_by: req.user!.id,
       vat_percent: body.vat_percent,
+      include_vat: body.include_vat,
+      discount_percent: body.discount_percent,
+      discount_amount: body.discount_amount,
+      other_label: body.other_label,
+      other_amount: body.other_amount,
       subtotal,
       vat_amount,
       total_amount,
@@ -155,6 +191,30 @@ router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: Authe
 }))
 
 /** PATCH /api/quotations/:id - update draft */
+/** PATCH /api/quotations/:id/meta - admin can edit quotation_number after creation */
+router.patch('/:id/meta', requireRole('admin'), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const schema = z.object({
+    quotation_number: z.string().min(1).optional(),
+    notes: z.string().optional().nullable(),
+  })
+  const body = schema.parse(req.body)
+
+  const { data, error } = await supabaseAdmin
+    .from('quotations')
+    .update({ ...body, updated_at: new Date().toISOString() })
+    .eq('id', req.params.id).select().single()
+  if (error) return res.status(400).json({ error: translateError(error.message) })
+
+  await logActivity({
+    userId: req.user!.id,
+    action: 'quotation.edit_meta',
+    entityType: 'quotation',
+    entityId: req.params.id,
+    description: `แก้ไขข้อมูลใบเสนอราคา ${data.quotation_number}`,
+  })
+  res.json({ data })
+}))
+
 router.patch('/:id', requireRole('sales', 'manager', 'admin'), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { data: existing } = await supabaseAdmin.from('quotations').select('*').eq('id', req.params.id).single()
   if (!existing) return res.status(404).json({ error: 'Not found' })

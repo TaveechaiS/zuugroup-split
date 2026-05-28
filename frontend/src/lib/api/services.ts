@@ -53,6 +53,8 @@ export const quotationsApi = {
   update: (id: string, body: any) => api.patch(`/quotations/${id}`, body).then((r) => r.data),
   approve: (id: string) => api.post(`/quotations/${id}/approve`).then((r) => r),
   reject: (id: string, reason: string) => api.post(`/quotations/${id}/reject`, { reason }),
+  updateMeta: (id: string, body: { quotation_number?: string; notes?: string }) =>
+    api.patch(`/quotations/${id}/meta`, body).then((r) => r.data),
 }
 
 export const ordersApi = {
@@ -60,6 +62,8 @@ export const ordersApi = {
     api.get('/orders', params).then((r) => r.data),
   get: (id: string) => api.get(`/orders/${id}`).then((r) => r.data),
   create: (body: any) => api.post('/orders', body).then((r) => r.data),
+  updateMeta: (id: string, body: { order_number?: string; notes?: string }) =>
+    api.patch(`/orders/${id}`, body).then((r) => r.data),
   reviewPass: (id: string) => api.post(`/orders/${id}/review-pass`),
   reviewReject: (id: string, reason: string) => api.post(`/orders/${id}/review-reject`, { reason }),
   confirm: (id: string) => api.post(`/orders/${id}/confirm`),
@@ -90,3 +94,19 @@ export const activityLogsApi = {
 export const badgesApi = {
   get: () => api.get('/badges').then((r) => r.data as Record<string, number>),
 }
+
+export const zonesApi = {
+  list: () => api.get('/zones').then((r) => r.data as any[]),
+  get: (id: string) => api.get(`/zones/${id}`).then((r) => r.data),
+  create: (body: any) => api.post('/zones', body).then((r) => r.data),
+  update: (id: string, body: any) => api.patch(`/zones/${id}`, body).then((r) => r.data),
+  remove: (id: string) => api.delete(`/zones/${id}`),
+}
+
+export const stockLogsApi = {
+  forProduct: (productId: string) =>
+    api.get(`/products/${productId}/stock-logs`).then((r) => r.data as any[]),
+}
+
+export const reportsAdminApi = (filters?: Record<string, any>) =>
+  api.get('/reports/admin', filters).then((r) => r.data)

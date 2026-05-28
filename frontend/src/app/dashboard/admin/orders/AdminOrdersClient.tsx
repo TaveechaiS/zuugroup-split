@@ -6,7 +6,7 @@ import { Search, ChevronRight } from 'lucide-react'
 
 const STATUS: Record<string, { label: string; color: string }> = {
   pending_review: { label: 'รอตรวจสอบ', color: 'bg-yellow-100 text-yellow-700' },
-  processing: { label: 'กำลังดำเนินการ', color: 'bg-blue-100 text-blue-700' },
+  processing: { label: 'รอยืนยันการขาย', color: 'bg-blue-100 text-blue-700' },
   completed: { label: 'สำเร็จ', color: 'bg-green-100 text-green-700' },
   cancelled: { label: 'ยกเลิก', color: 'bg-gray-100 text-gray-500' },
   rejected: { label: 'ไม่ผ่าน', color: 'bg-red-100 text-red-700' },

@@ -1,5 +1,6 @@
 // src/routes/users.ts
 import { Router } from 'express'
+import { translateError } from '../lib/translateError'
 import { supabaseAdmin } from '../lib/supabase'
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/auth'
 import { asyncHandler } from '../middleware/errorHandler'
@@ -43,6 +44,7 @@ const createUserSchema = z.object({
   last_name: z.string().min(1),
   role: z.enum(['admin', 'manager', 'sales', 'cfo']),
   team_id: z.string().uuid().nullable().optional(),
+  zone_id: z.string().uuid().nullable().optional(),
   phone: z.string().optional(),
 })
 
@@ -56,7 +58,7 @@ router.post('/', requireRole('admin'), asyncHandler(async (req: AuthenticatedReq
     password: body.password,
     email_confirm: true,
   })
-  if (authError) return res.status(400).json({ error: authError.message })
+  if (authError) return res.status(400).json({ error: translateError(authError.message) })
 
   // Insert profile
   const { data: profile, error: profileError } = await supabaseAdmin
@@ -68,6 +70,7 @@ router.post('/', requireRole('admin'), asyncHandler(async (req: AuthenticatedReq
       last_name: body.last_name,
       role: body.role,
       team_id: body.team_id ?? null,
+      zone_id: body.zone_id ?? null,
       phone: body.phone,
       is_active: true,
     })
@@ -76,7 +79,7 @@ router.post('/', requireRole('admin'), asyncHandler(async (req: AuthenticatedReq
 
   if (profileError) {
     await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
-    return res.status(400).json({ error: profileError.message })
+    return res.status(400).json({ error: translateError(profileError.message) })
   }
 
   await logActivity({
@@ -110,7 +113,7 @@ router.patch('/:id', requireRole('admin'), asyncHandler(async (req: Authenticate
 
   if (password) {
     const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(req.params.id, { password })
-    if (authError) return res.status(400).json({ error: authError.message })
+    if (authError) return res.status(400).json({ error: translateError(authError.message) })
   }
 
   const { data, error } = await supabaseAdmin

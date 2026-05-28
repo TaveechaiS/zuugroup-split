@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Search, Plus, Edit2, Trash2, X } from 'lucide-react'
-import { usersApi } from '@/lib/api/services'
+import { usersApi, zonesApi } from '@/lib/api/services'
 
 const ROLE_LABELS: Record<string, string> = { admin: 'ผู้ดูแล', manager: 'ผู้จัดการ', sales: 'พนักงานขาย', cfo: 'ผู้บริหาร' }
 
@@ -15,13 +15,15 @@ export default function UsersClient({ users, teams, onReload }: Props) {
   const [error, setError] = useState('')
   const [viewing, setViewing] = useState<any>(null)
 
-  const [form, setForm] = useState({ email: '', password: '', first_name: '', last_name: '', role: 'sales', team_id: '', phone: '' })
+  const [form, setForm] = useState({ email: '', password: '', first_name: '', last_name: '', role: 'sales', team_id: '', zone_id: '', phone: '' })
+  const [zones, setZones] = useState<any[]>([])
+  useEffect(() => { zonesApi.list().then(setZones).catch(() => setZones([])) }, [])
 
   const filtered = users.filter((u) => {
     const haystack = [
       u.first_name, u.last_name, u.email, u.phone,
       ROLE_LABELS[u.role], u.role,
-      u.team?.name,
+      u.team?.name, u.zone?.code, u.zone?.name,
       u.is_active ? 'ใช้งาน active' : 'ปิด inactive',
     ].filter(Boolean).join(' ').toLowerCase()
     return haystack.includes(search.toLowerCase())
@@ -29,12 +31,12 @@ export default function UsersClient({ users, teams, onReload }: Props) {
 
   const startAdd = () => {
     setEditing(null)
-    setForm({ email: '', password: '', first_name: '', last_name: '', role: 'sales', team_id: '', phone: '' })
+    setForm({ email: '', password: '', first_name: '', last_name: '', role: 'sales', team_id: '', zone_id: '', phone: '' })
     setShowAdd(true); setError('')
   }
   const startEdit = (u: any) => {
     setEditing(u)
-    setForm({ email: u.email, password: '', first_name: u.first_name, last_name: u.last_name, role: u.role, team_id: u.team_id ?? '', phone: u.phone ?? '' })
+    setForm({ email: u.email, password: '', first_name: u.first_name, last_name: u.last_name, role: u.role, team_id: u.team_id ?? '', zone_id: u.zone_id ?? '', phone: u.phone ?? '' })
     setShowAdd(true); setError('')
     setViewing(null)
   }
@@ -43,11 +45,11 @@ export default function UsersClient({ users, teams, onReload }: Props) {
     e.preventDefault(); setError('')
     try {
       if (editing) {
-        const body: any = { first_name: form.first_name, last_name: form.last_name, role: form.role as any, team_id: form.team_id || null, phone: form.phone }
+        const body: any = { first_name: form.first_name, last_name: form.last_name, role: form.role as any, team_id: form.team_id || null, zone_id: form.zone_id || null, phone: form.phone }
         if (form.password) body.password = form.password
         await usersApi.update(editing.id, body)
       } else {
-        await usersApi.create({ email: form.email, password: form.password, first_name: form.first_name, last_name: form.last_name, role: form.role, team_id: form.team_id || null, phone: form.phone })
+        await usersApi.create({ email: form.email, password: form.password, first_name: form.first_name, last_name: form.last_name, role: form.role, team_id: form.team_id || null, zone_id: form.zone_id || null, phone: form.phone })
       }
       setShowAdd(false); onReload()
     } catch (err: any) { setError(err.message) }
@@ -182,6 +184,13 @@ export default function UsersClient({ users, teams, onReload }: Props) {
                     {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">เขตการขาย</label>
+                <select value={form.zone_id} onChange={(e) => setForm({ ...form, zone_id: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">-- ไม่ระบุเขต --</option>
+                  {zones.map((z) => <option key={z.id} value={z.id}>{z.code} - {z.name}</option>)}
+                </select>
               </div>
               <div className="flex gap-2 justify-end pt-3">
                 <button type="button" onClick={() => setShowAdd(false)} className="px-4 py-2 border border-gray-300 rounded-lg text-sm">ยกเลิก</button>

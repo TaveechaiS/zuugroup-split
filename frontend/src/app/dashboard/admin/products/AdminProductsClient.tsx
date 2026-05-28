@@ -15,19 +15,39 @@ export default function AdminProductsClient({ products, categories, onReload }: 
   const router = useRouter()
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const [form, setForm] = useState({ name: '', quantity: 0, price_per_unit: 0, category_id: '', unit: '', image_url: '', status: 'available' })
+  const [form, setForm] = useState({
+    name: '', product_code: '',
+    quantity: 0, price_per_unit: 0, cost_price: 0,
+    category_id: '', unit: '', image_url: '', status: 'available',
+    lot_number: '', manufacture_date: '', expiry_date: '',
+  })
 
   const filtered = products.filter((p) => {
     const haystack = [
-      p.name, p.unit, p.category?.name,
+      p.product_code, p.name, p.unit, p.category?.name, p.lot_number,
       p.status === 'available' ? 'พร้อมขาย available' : 'ปิดการขาย unavailable ปิด',
       String(p.quantity ?? ''), String(p.price_per_unit ?? ''),
     ].filter(Boolean).join(' ').toLowerCase()
     return haystack.includes(search.toLowerCase())
   })
 
-  const startAdd = () => { setEditing(null); setForm({ name: '', quantity: 0, price_per_unit: 0, category_id: '', unit: '', image_url: '', status: 'available' }); setShowForm(true); setError('') }
-  const startEdit = (p: any) => { setEditing(p); setForm({ name: p.name, quantity: p.quantity, price_per_unit: p.price_per_unit, category_id: p.category_id ?? '', unit: p.unit ?? '', image_url: p.image_url ?? '', status: p.status }); setShowForm(true); setError('') }
+  const blankForm = {
+    name: '', product_code: '',
+    quantity: 0, price_per_unit: 0, cost_price: 0,
+    category_id: '', unit: '', image_url: '', status: 'available',
+    lot_number: '', manufacture_date: '', expiry_date: '',
+  }
+  const startAdd = () => { setEditing(null); setForm(blankForm); setShowForm(true); setError('') }
+  const startEdit = (p: any) => {
+    setEditing(p)
+    setForm({
+      name: p.name, product_code: p.product_code ?? '',
+      quantity: p.quantity, price_per_unit: p.price_per_unit, cost_price: p.cost_price ?? 0,
+      category_id: p.category_id ?? '', unit: p.unit ?? '', image_url: p.image_url ?? '', status: p.status,
+      lot_number: p.lot_number ?? '', manufacture_date: p.manufacture_date ?? '', expiry_date: p.expiry_date ?? '',
+    })
+    setShowForm(true); setError('')
+  }
 
   const handleFile = (file: File) => {
     if (file.size > 2 * 1024 * 1024) { setError('ไฟล์ใหญ่เกิน 2MB'); return }
@@ -65,10 +85,12 @@ export default function AdminProductsClient({ products, categories, onReload }: 
         <div className="overflow-x-auto"><table className="w-full text-sm min-w-[640px]">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100 text-xs text-gray-500 uppercase">
+              <th className="text-left px-5 py-3">รหัส</th>
               <th className="text-left px-5 py-3">ชื่อสินค้า</th>
               <th className="text-left px-5 py-3">หมวดหมู่</th>
               <th className="text-right px-5 py-3">คงเหลือ</th>
-              <th className="text-right px-5 py-3">ราคา/หน่วย</th>
+              <th className="text-right px-5 py-3">ต้นทุน</th>
+              <th className="text-right px-5 py-3">ราคาขาย</th>
               <th className="text-center px-5 py-3">สถานะ</th>
               <th className="text-center px-5 py-3">จัดการ</th>
             </tr>
@@ -76,9 +98,11 @@ export default function AdminProductsClient({ products, categories, onReload }: 
           <tbody className="divide-y divide-gray-50">
             {filtered.map((p) => (
               <tr key={p.id} className="hover:bg-gray-50">
+                <td className="px-5 py-3.5 font-mono text-xs text-blue-700">{p.product_code ?? '-'}</td>
                 <td className="px-5 py-3.5 font-medium text-gray-900 cursor-pointer" onClick={() => router.push(`/dashboard/admin/products/${p.id}`)}>{p.name}</td>
                 <td className="px-5 py-3.5 text-gray-600">{p.category?.name ?? '-'}</td>
                 <td className={`px-5 py-3.5 text-right ${p.quantity < 10 ? 'text-red-600 font-bold' : 'text-gray-900'}`}>{p.quantity} {p.unit ?? ''}</td>
+                <td className="px-5 py-3.5 text-right text-orange-700">฿{(p.cost_price ?? 0).toLocaleString()}</td>
                 <td className="px-5 py-3.5 text-right text-gray-900">฿{p.price_per_unit.toLocaleString()}</td>
                 <td className="px-5 py-3.5 text-center">
                   <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${p.status === 'available' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
@@ -93,7 +117,7 @@ export default function AdminProductsClient({ products, categories, onReload }: 
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={6} className="text-center py-10 text-gray-400">ไม่พบสินค้า</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={8} className="text-center py-10 text-gray-400">ไม่พบสินค้า</td></tr>}
           </tbody>
         </table></div>
       </div>
@@ -104,14 +128,13 @@ export default function AdminProductsClient({ products, categories, onReload }: 
             <h3 className="font-semibold text-gray-900 mb-4">{editing ? 'แก้ไขสินค้า' : 'เพิ่มสินค้าใหม่'}</h3>
             {error && <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm mb-3">{error}</div>}
             <form onSubmit={save} className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">ชื่อสินค้า *</label>
-                <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">จำนวนสินค้าคงเหลือ *</label>
-                  <input required type="number" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">รหัสสินค้า</label>
+                  <input value={form.product_code} onChange={(e) => setForm({ ...form, product_code: e.target.value })}
+                    placeholder={editing ? '' : 'auto: PRD-0001'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+                  <p className="text-xs text-gray-400 mt-0.5">ปล่อยว่างเพื่อ auto-gen</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">หน่วย (เช่น กล่อง)</label>
@@ -119,8 +142,46 @@ export default function AdminProductsClient({ products, categories, onReload }: 
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">ราคาขายต่อหน่วย (บาท) *</label>
-                <input required type="number" step="0.01" value={form.price_per_unit} onChange={(e) => setForm({ ...form, price_per_unit: Number(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">ชื่อสินค้า <span className="text-red-500">*</span></label>
+                <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">จำนวนสินค้าคงเหลือ <span className="text-red-500">*</span></label>
+                  <input required type="number" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                  {editing && <p className="text-xs text-blue-500 mt-0.5">การเปลี่ยนจำนวนจะถูกบันทึกใน Stock Log</p>}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">เลขล็อต</label>
+                  <input value={form.lot_number} onChange={(e) => setForm({ ...form, lot_number: e.target.value })}
+                    placeholder="เช่น L240501"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">วันผลิต</label>
+                  <input type="date" value={form.manufacture_date} onChange={(e) => setForm({ ...form, manufacture_date: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">วันหมดอายุ</label>
+                  <input type="date" value={form.expiry_date} onChange={(e) => setForm({ ...form, expiry_date: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">ราคาต้นทุน (บาท)</label>
+                  <input type="number" step="0.01" value={form.cost_price} onChange={(e) => setForm({ ...form, cost_price: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-orange-200 bg-orange-50 rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-500" />
+                  <p className="text-xs text-orange-600 mt-0.5">เห็นได้แค่ Admin / CFO</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">ราคาขาย (บาท) <span className="text-red-500">*</span></label>
+                  <input required type="number" step="0.01" value={form.price_per_unit} onChange={(e) => setForm({ ...form, price_per_unit: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">หมวดหมู่</label>

@@ -43,6 +43,11 @@ export default function QuotationViewClient({ quotation }: Props) {
     subtotal: quotation.subtotal,
     vat_percent: quotation.vat_percent,
     vat_amount: quotation.vat_amount,
+    include_vat: quotation.include_vat,
+    discount_percent: quotation.discount_percent,
+    discount_amount: quotation.discount_amount,
+    other_label: quotation.other_label,
+    other_amount: quotation.other_amount,
     total_amount: quotation.total_amount,
     notes: quotation.notes,
     contract_period_days: quotation.contract_period_days,
@@ -55,7 +60,13 @@ export default function QuotationViewClient({ quotation }: Props) {
       <div className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={() => window.close()} className="p-2 hover:bg-gray-100 rounded-lg"><ArrowLeft size={18} /></button>
+            <button
+              onClick={() => {
+                if (typeof window !== 'undefined' && window.history.length > 1) router.back()
+                else router.push('/dashboard/sales')
+              }}
+              title="ย้อนกลับ"
+              className="p-2 hover:bg-gray-100 rounded-lg"><ArrowLeft size={18} /></button>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="font-bold text-gray-900">ใบเสนอราคา {quotation.quotation_number}</h1>

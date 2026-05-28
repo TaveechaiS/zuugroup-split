@@ -2,23 +2,37 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, X, ArrowLeft } from 'lucide-react'
+import { Check, X, ArrowLeft, Edit2 } from 'lucide-react'
 import { ordersApi } from '@/lib/api/services'
 
 const STATUS: Record<string, { label: string; color: string }> = {
   pending_review: { label: 'รอตรวจสอบ', color: 'bg-yellow-100 text-yellow-700' },
-  processing: { label: 'กำลังดำเนินการ', color: 'bg-blue-100 text-blue-700' },
+  processing: { label: 'รอยืนยันการขาย', color: 'bg-blue-100 text-blue-700' },
   completed: { label: 'สำเร็จ', color: 'bg-green-100 text-green-700' },
   cancelled: { label: 'ยกเลิก', color: 'bg-gray-100 text-gray-500' },
   rejected: { label: 'ไม่ผ่าน', color: 'bg-red-100 text-red-700' },
 }
 
-export default function OrderDetailClient({ order }: { order: any }) {
+export default function OrderDetailClient({ order: initialOrder }: { order: any }) {
   const router = useRouter()
+  const [order, setOrder] = useState(initialOrder)
   const [saving, setSaving] = useState(false)
   const [showCancel, setShowCancel] = useState(false)
   const [reason, setReason] = useState('')
   const [error, setError] = useState('')
+  const [editingNumber, setEditingNumber] = useState(false)
+  const [editNumber, setEditNumber] = useState(order.order_number ?? '')
+
+  const saveOrderNumber = async () => {
+    setSaving(true); setError('')
+    try {
+      const res = await ordersApi.updateMeta(order.id, { order_number: editNumber.trim() })
+      setOrder((o: any) => ({ ...o, order_number: res?.order_number ?? editNumber.trim() }))
+      setEditingNumber(false)
+    } catch (err: any) {
+      setError(err.message || 'แก้ไขเลขบิลไม่สำเร็จ')
+    } finally { setSaving(false) }
+  }
 
   const confirm = async () => {
     setSaving(true); setError('')
@@ -42,9 +56,12 @@ export default function OrderDetailClient({ order }: { order: any }) {
   return (
     <div className="p-4 sm:p-6">
       <div className="max-w-5xl mx-auto space-y-5">
-        {/* Back button */}
+        {/* Back button — uses browser history; falls back to orders list */}
         <button
-          onClick={() => router.push('/dashboard/admin/orders')}
+          onClick={() => {
+            if (typeof window !== 'undefined' && window.history.length > 1) router.back()
+            else router.push('/dashboard/admin/orders')
+          }}
           className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-blue-600 transition"
         >
           <ArrowLeft size={16} /> ย้อนกลับ
@@ -53,9 +70,33 @@ export default function OrderDetailClient({ order }: { order: any }) {
         {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
 
         <div className="bg-white rounded-xl border border-gray-100 p-5">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h2 className="text-lg font-bold text-gray-900">คำสั่งซื้อ {order.order_number}</h2>
+          <div className="flex items-start justify-between mb-4 gap-3 flex-wrap">
+            <div className="min-w-0">
+              {editingNumber ? (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-lg font-bold text-gray-900">คำสั่งซื้อ</span>
+                  <input
+                    value={editNumber}
+                    onChange={(e) => setEditNumber(e.target.value)}
+                    autoFocus
+                    className="px-2 py-1 border border-blue-300 rounded-lg text-lg font-mono outline-none focus:ring-2 focus:ring-blue-500 max-w-[200px]"
+                  />
+                  <button onClick={saveOrderNumber} disabled={saving}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium disabled:opacity-60">
+                    {saving ? 'บันทึก…' : 'บันทึก'}
+                  </button>
+                  <button onClick={() => { setEditingNumber(false); setEditNumber(order.order_number ?? '') }}
+                    className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs text-gray-600">ยกเลิก</button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-bold text-gray-900">คำสั่งซื้อ {order.order_number}</h2>
+                  <button onClick={() => setEditingNumber(true)}
+                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition" title="แก้ไขเลขบิล">
+                    <Edit2 size={14} />
+                  </button>
+                </div>
+              )}
               <p className="text-sm text-gray-500 mt-1">{new Date(order.created_at).toLocaleString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
             </div>
             <span className={`px-3 py-1 rounded-full text-xs font-medium ${STATUS[order.status]?.color}`}>{STATUS[order.status]?.label}</span>

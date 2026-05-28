@@ -1,17 +1,69 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Bell, Search, Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Bell, Search, Menu, PanelLeftClose, PanelLeftOpen, ExternalLink } from 'lucide-react'
 import { notificationsApi } from '@/lib/api/services'
+import { currentUser } from '@/lib/api/auth'
 import { useUI } from '@/lib/ui-context'
 
 interface Props { title: string }
 
+// Convert a notification's entity → route based on the current user's role.
+function buildHref(
+  entityType: string | null | undefined,
+  entityId: string | null | undefined,
+  role: string | undefined,
+): string | null {
+  if (!entityType || !entityId || !role) return null
+
+  const map: Record<string, Record<string, string>> = {
+    quotation: {
+      admin: `/dashboard/sales/quotations/${entityId}`,    // sales route, admin can view via layout
+      manager: `/dashboard/manager/quotations-pending/${entityId}`,
+      sales: `/dashboard/sales/quotations/${entityId}`,
+      cfo: `/dashboard/sales/quotations/${entityId}`,
+    },
+    order: {
+      admin: `/dashboard/admin/orders/${entityId}`,
+      manager: `/dashboard/manager/orders-pending/${entityId}`,
+      sales: `/dashboard/sales/orders/${entityId}`,
+      cfo: `/dashboard/sales/orders/${entityId}`,
+    },
+    customer_request: {
+      admin: `/dashboard/admin/customer-requests/${entityId}`,
+      manager: `/dashboard/admin/customer-requests/${entityId}`,
+      sales: `/dashboard/sales/request-customer`,
+      cfo: `/dashboard/admin/customer-requests/${entityId}`,
+    },
+    user: {
+      admin: `/dashboard/admin/users`,
+      manager: `/dashboard/manager`,
+      sales: `/dashboard/sales`,
+      cfo: `/dashboard/cfo/users`,
+    },
+    customer: {
+      admin: `/dashboard/admin/customers`,
+      manager: `/dashboard/manager/customers`,
+      sales: `/dashboard/sales/customers`,
+      cfo: `/dashboard/cfo/customers`,
+    },
+  }
+  return map[entityType]?.[role] ?? null
+}
+
 export default function TopBar({ title }: Props) {
+  const router = useRouter()
   const [notifications, setNotifications] = useState<any[]>([])
   const [showNotif, setShowNotif] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
+  const [role, setRole] = useState<string | undefined>(undefined)
   const { openMobileSidebar, sidebarCollapsed, toggleSidebar } = useUI()
+
+  useEffect(() => {
+    const u = currentUser()
+    if (u?.role) setRole(u.role)
+  }, [])
 
   const loadNotifications = async () => {
     try { setNotifications(await notificationsApi.list()) } catch { /* ignore */ }
@@ -40,6 +92,17 @@ export default function TopBar({ title }: Props) {
       await notificationsApi.markRead(n.id)
       loadNotifications()
     } catch { /* ignore */ }
+  }
+
+  /** Click a notification → mark read + navigate to the related entity. */
+  const handleNotifClick = async (n: any) => {
+    if (!n.is_read) {
+      try { await notificationsApi.markRead(n.id) } catch { /* ignore */ }
+    }
+    const href = buildHref(n.related_entity_type, n.related_entity_id, role)
+    setShowNotif(false)
+    if (href) router.push(href)
+    else loadNotifications()
   }
 
   const typeColor = (t: string) => {
@@ -117,24 +180,36 @@ export default function TopBar({ title }: Props) {
                 <p className="p-6 text-center text-sm text-gray-400">ไม่มีการแจ้งเตือน</p>
               ) : (
                 <div className="divide-y divide-gray-50">
-                  {notifications.map((n) => (
-                    <div
-                      key={n.id}
-                      onClick={() => markOneRead(n)}
-                      className={`p-3 cursor-pointer hover:bg-gray-50 ${!n.is_read ? typeColor(n.type) : ''}`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900">{n.title}</p>
-                          <p className="text-xs text-gray-600 mt-0.5 break-words">{n.message}</p>
-                          <p className="text-[10px] text-gray-400 mt-1">
-                            {new Date(n.created_at).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                          </p>
+                  {notifications.map((n) => {
+                    const href = buildHref(n.related_entity_type, n.related_entity_id, role)
+                    const clickable = !!href
+                    return (
+                      <div
+                        key={n.id}
+                        onClick={() => handleNotifClick(n)}
+                        className={`p-3 cursor-pointer hover:bg-gray-50 group ${!n.is_read ? typeColor(n.type) : ''}`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-sm font-medium text-gray-900 flex-1 min-w-0 truncate">{n.title}</p>
+                              {clickable && (
+                                <ExternalLink size={12} className="text-gray-400 group-hover:text-blue-600 shrink-0" />
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-600 mt-0.5 break-words">{n.message}</p>
+                            <div className="flex items-center justify-between mt-1">
+                              <p className="text-[10px] text-gray-400">
+                                {new Date(n.created_at).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                              {clickable && <p className="text-[10px] text-blue-600 font-medium opacity-0 group-hover:opacity-100 transition">กดเพื่อดู →</p>}
+                            </div>
+                          </div>
+                          {!n.is_read && <span className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />}
                         </div>
-                        {!n.is_read && <span className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />}
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>

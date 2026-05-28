@@ -53,14 +53,12 @@ function thaiDate(d: Date | string | undefined): string {
 
 // ============================================================
 // Pagination — how many items fit per page.
-// Notes + signature appear on EVERY page (so the per-page item count
-// is reduced to leave room for them). Totals box appears only on the
-// last page (it's a summary).
+// Two profiles: with-images (bigger rows) vs text-only (smaller rows).
+// Notes + signature appear on EVERY page. Totals box appears only on
+// the last page.
 // ============================================================
-const ITEMS_FIRST_PAGE = 4           // customer block + footer
-const ITEMS_MIDDLE_PAGE = 6          // header + items + footer
-const ITEMS_LAST_PAGE = 4            // totals + footer
-const ITEMS_ONLY_PAGE = 4            // single-page (all blocks)
+const WITH_IMG = { first: 4, middle: 6, last: 4, only: 4 }
+const TEXT_ONLY = { first: 8, middle: 12, last: 8, only: 10 }
 
 // ============================================================
 // Types
@@ -94,6 +92,11 @@ export interface DocData {
   subtotal?: number
   vat_percent?: number
   vat_amount?: number
+  include_vat?: boolean
+  discount_percent?: number
+  discount_amount?: number
+  other_label?: string | null
+  other_amount?: number
   total_amount: number
   notes?: string
   contract_period_days?: number
@@ -161,28 +164,44 @@ ${inner}
 }
 
 // ============================================================
-// Page chunking — split items across pages
+// Merge duplicate items (same product + same price) into one row
 // ============================================================
-function chunkItems<T>(items: T[]): T[][] {
-  if (items.length === 0) return [[]]
-  // single-page case
-  if (items.length <= ITEMS_ONLY_PAGE) return [items]
+function mergeDuplicates(items: DocData['items']): DocData['items'] {
+  const map = new Map<string, any>()
+  for (const it of items) {
+    const key = `${it.name}|${it.unit_price}|${it.unit ?? ''}`
+    const existing = map.get(key)
+    if (existing) {
+      existing.quantity += it.quantity
+      existing.total_price += it.total_price
+    } else {
+      map.set(key, { ...it })
+    }
+  }
+  return Array.from(map.values())
+}
 
-  const pages: T[][] = []
-  // first page
-  pages.push(items.slice(0, ITEMS_FIRST_PAGE))
-  let i = ITEMS_FIRST_PAGE
-  // middle pages — but we want to know which is last so we can reserve space.
-  // strategy: take ITEMS_MIDDLE_PAGE chunks until the remaining items fit
-  // in a last-page-with-footer space.
+// ============================================================
+// Page chunking — adapts items-per-page based on image presence
+// ============================================================
+function chunkItems(items: DocData['items']): DocData['items'][] {
+  const hasImages = items.some((it) => !!it.image_url)
+  const sz = hasImages ? WITH_IMG : TEXT_ONLY
+
+  if (items.length === 0) return [[]]
+  if (items.length <= sz.only) return [items]
+
+  const pages: DocData['items'][] = []
+  pages.push(items.slice(0, sz.first))
+  let i = sz.first
   while (i < items.length) {
     const remaining = items.length - i
-    if (remaining <= ITEMS_LAST_PAGE) {
+    if (remaining <= sz.last) {
       pages.push(items.slice(i))
       break
     }
-    pages.push(items.slice(i, i + ITEMS_MIDDLE_PAGE))
-    i += ITEMS_MIDDLE_PAGE
+    pages.push(items.slice(i, i + sz.middle))
+    i += sz.middle
   }
   return pages
 }
@@ -280,10 +299,14 @@ function buildPageHtml(
     </table>`
 
   // ----- Totals box (last page only — it's a summary) -----
+  const discountTotal =
+    (data.subtotal ?? 0) * ((data.discount_percent ?? 0) / 100) + (data.discount_amount ?? 0)
   const totalsHtml = ctx.isLast ? `
     <div class="totals">
-      ${data.subtotal !== undefined ? `<div class="totals-row"><span>ยอดก่อน VAT</span><span>${fmt(data.subtotal)}</span></div>` : ''}
-      ${data.vat_amount !== undefined ? `<div class="totals-row"><span>VAT (${data.vat_percent ?? 7}%)</span><span>${fmt(data.vat_amount)}</span></div>` : ''}
+      ${data.subtotal !== undefined ? `<div class="totals-row"><span>ยอดรวมก่อนปรับ</span><span>${fmt(data.subtotal)}</span></div>` : ''}
+      ${discountTotal > 0 ? `<div class="totals-row" style="color:#dc2626"><span>ส่วนลด</span><span>-${fmt(discountTotal)}</span></div>` : ''}
+      ${data.vat_amount !== undefined && data.vat_amount > 0 ? `<div class="totals-row"><span>VAT (${data.vat_percent ?? 7}%)</span><span>${fmt(data.vat_amount)}</span></div>` : ''}
+      ${(data.other_amount ?? 0) > 0 ? `<div class="totals-row"><span>${esc(data.other_label || 'อื่นๆ')}</span><span>${fmt(data.other_amount ?? 0)}</span></div>` : ''}
       <div class="totals-row totals-grand"><span>ยอดสุทธิ (บาท)</span><span>${fmt(data.total_amount)}</span></div>
     </div>
   ` : ''
@@ -324,7 +347,8 @@ function buildPageHtml(
 }
 
 function buildAllPagesHtml(title: string, data: DocData): string {
-  const pages = chunkItems(data.items)
+  const merged = mergeDuplicates(data.items)
+  const pages = chunkItems(merged)
   const total = pages.length
   let startIdx = 0
   return pages.map((pageItems, i) => {
@@ -483,7 +507,8 @@ async function generateDocumentPdf(title: string, data: DocData): Promise<Blob> 
   const pageW = pdf.internal.pageSize.getWidth()   // 210mm
   const pageH = pdf.internal.pageSize.getHeight()  // 297mm
 
-  const pages = chunkItems(data.items)
+  const mergedItems = mergeDuplicates(data.items)
+  const pages = chunkItems(mergedItems)
   const total = pages.length
   let startIdx = 0
 

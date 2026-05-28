@@ -15,7 +15,7 @@ export default function ProductsViewClient({ products }: Props) {
 
   const filtered = products.filter((p) => {
     const haystack = [
-      p.name, p.unit, p.category?.name,
+      p.product_code, p.name, p.unit, p.category?.name, p.lot_number,
       p.status === 'available' ? 'พร้อมขาย available' : 'ไม่พร้อมขาย unavailable ปิด',
       String(p.quantity ?? ''), String(p.price_per_unit ?? ''),
     ].filter(Boolean).join(' ').toLowerCase()

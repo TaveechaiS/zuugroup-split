@@ -1,5 +1,6 @@
 // src/routes/customerRequests.ts
 import { Router } from 'express'
+import { translateError } from '../lib/translateError'
 import { supabaseAdmin } from '../lib/supabase'
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/auth'
 import { asyncHandler } from '../middleware/errorHandler'

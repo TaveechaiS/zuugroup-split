@@ -1,5 +1,6 @@
 // src/routes/customers.ts
 import { Router } from 'express'
+import { translateError } from '../lib/translateError'
 import { supabaseAdmin } from '../lib/supabase'
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/auth'
 import { asyncHandler } from '../middleware/errorHandler'
@@ -12,10 +13,14 @@ router.use(requireAuth)
 
 const customerSchema = z.object({
   company_name: z.string().min(1),
+  customer_code: z.string().optional().nullable(),
+  zone_id: z.string().uuid().nullable().optional(),
   address: z.string().optional(),
   contact_name: z.string().optional(),
   phone: z.string().optional(),
   email: z.string().email().optional().or(z.literal('')),
+  has_tax_id: z.boolean().optional(),
+  tax_id: z.string().optional().nullable(),
   drug_license_number: z.string().optional(),
   location_image_url: z.string().optional().or(z.literal('')),
   drug_license_image_url: z.string().optional().or(z.literal('')),
@@ -26,15 +31,15 @@ const customerSchema = z.object({
 router.get('/', asyncHandler(async (_req, res) => {
   const { data, error } = await supabaseAdmin
     .from('customers')
-    .select('*')
-    .order('company_name')
+    .select('*, zone:sales_zones(id, code, name, region, province)')
+    .order('customer_code', { ascending: true })
   if (error) throw error
   res.json({ data })
 }))
 
 router.get('/:id', asyncHandler(async (req, res) => {
   const { data, error } = await supabaseAdmin
-    .from('customers').select('*').eq('id', req.params.id).single()
+    .from('customers').select('*, zone:sales_zones(id, code, name, region, province)').eq('id', req.params.id).single()
   if (error) return res.status(404).json({ error: 'Not found' })
   res.json({ data })
 }))

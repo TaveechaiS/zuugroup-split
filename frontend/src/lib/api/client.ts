@@ -1,6 +1,8 @@
 // src/lib/api/client.ts
 'use client'
 
+import { translateError } from './translateError'
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
 
 const TOKEN_KEY = 'zuugroup_token'
@@ -50,15 +52,21 @@ export async function apiRequest<T = any>(path: string, options: RequestOptions 
     if (qs) url += `?${qs}`
   }
 
-  const res = await fetch(url, {
-    ...rest,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
-      ...headers,
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  })
+  let res: Response
+  try {
+    res = await fetch(url, {
+      ...rest,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+        ...headers,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    })
+  } catch (err: any) {
+    // Network failure — translate to Thai
+    throw new Error(translateError(err?.message || 'fetch failed'))
+  }
 
   if (res.status === 401) {
     clearSession()
@@ -69,7 +77,9 @@ export async function apiRequest<T = any>(path: string, options: RequestOptions 
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error(error.error || 'Request failed')
+    // Always translate. Backend usually sends Thai already (passes through)
+    // but anything technical from Supabase/network is converted here.
+    throw new Error(translateError(error.error || error.message || 'Request failed'))
   }
 
   return res.json()

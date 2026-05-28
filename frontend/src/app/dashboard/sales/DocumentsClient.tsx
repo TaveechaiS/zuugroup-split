@@ -15,7 +15,7 @@ const Q_STATUS: Record<string, { label: string; color: string }> = {
 }
 const O_STATUS: Record<string, { label: string; color: string }> = {
   pending_review: { label: 'รอตรวจสอบ', color: 'bg-yellow-100 text-yellow-700' },
-  processing: { label: 'กำลังดำเนินการ', color: 'bg-blue-100 text-blue-700' },
+  processing: { label: 'รอยืนยันการขาย', color: 'bg-blue-100 text-blue-700' },
   completed: { label: 'สำเร็จ', color: 'bg-green-100 text-green-700' },
   cancelled: { label: 'ยกเลิก', color: 'bg-gray-100 text-gray-700' },
   rejected: { label: 'ไม่ผ่าน', color: 'bg-red-100 text-red-700' },
@@ -104,6 +104,11 @@ export default function DocumentsClient({ quotations, orders, basePath = '/dashb
         subtotal: full.subtotal,
         vat_percent: full.vat_percent,
         vat_amount: full.vat_amount,
+        include_vat: full.include_vat,
+        discount_percent: full.discount_percent,
+        discount_amount: full.discount_amount,
+        other_label: full.other_label,
+        other_amount: full.other_amount,
         total_amount: full.total_amount,
         notes: full.notes,
         contract_period_days: full.contract_period_days,
@@ -248,6 +253,24 @@ export default function DocumentsClient({ quotations, orders, basePath = '/dashb
   )
 }
 
+/** Group line items by product_id + unit_price so duplicates display as
+ *  a single combined row. Adds _rows counter for the badge. */
+function mergeDuplicateItems(items: any[]): any[] {
+  const map = new Map<string, any>()
+  for (const it of items) {
+    const key = `${it.product_id ?? ''}-${it.unit_price ?? ''}-${it.negotiated_price ?? ''}`
+    const existing = map.get(key)
+    if (existing) {
+      existing.quantity = (existing.quantity ?? 0) + (it.quantity ?? 0)
+      existing.total_price = (existing.total_price ?? 0) + (it.total_price ?? 0)
+      existing._rows = (existing._rows ?? 1) + 1
+    } else {
+      map.set(key, { ...it, _rows: 1 })
+    }
+  }
+  return Array.from(map.values())
+}
+
 function DocumentDetailModal({ doc, full, loading, onClose, onExportPDF }: {
   doc: any; full: any; loading: boolean; onClose: () => void; onExportPDF: () => void
 }) {
@@ -315,34 +338,52 @@ function DocumentDetailModal({ doc, full, loading, onClose, onExportPDF }: {
                 </div>
               </section>
 
-              {/* Items */}
-              <section>
-                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">รายการสินค้า ({items.length} รายการ)</h4>
-                <div className="border border-gray-200 rounded-xl overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
-                          <th className="text-left px-4 py-2.5 font-medium">สินค้า</th>
-                          <th className="text-right px-4 py-2.5 font-medium">จำนวน</th>
-                          <th className="text-right px-4 py-2.5 font-medium">ราคา/หน่วย</th>
-                          <th className="text-right px-4 py-2.5 font-medium">รวม</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {items.map((it: any) => (
-                          <tr key={it.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-gray-900">{it.product?.name ?? '-'}</td>
-                            <td className="px-4 py-3 text-right text-gray-700">{it.quantity} {it.product?.unit ?? ''}</td>
-                            <td className="px-4 py-3 text-right text-gray-700">฿{(it.negotiated_price ?? it.unit_price)?.toLocaleString()}</td>
-                            <td className="px-4 py-3 text-right text-gray-900 font-medium">฿{it.total_price?.toLocaleString()}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </section>
+              {/* Items — merge duplicate products into single row for cleaner display */}
+              {(() => {
+                const merged = mergeDuplicateItems(items)
+                const hadDuplicates = merged.length !== items.length
+                return (
+                  <section>
+                    <div className="flex items-baseline justify-between mb-3">
+                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">รายการสินค้า ({merged.length} รายการ)</h4>
+                      {hadDuplicates && (
+                        <span className="text-[10px] text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full">
+                          รวมรายการซ้ำแล้ว (จริง {items.length} แถว)
+                        </span>
+                      )}
+                    </div>
+                    <div className="border border-gray-200 rounded-xl overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
+                              <th className="text-center px-3 py-2.5 font-medium w-12">#</th>
+                              <th className="text-left px-4 py-2.5 font-medium">สินค้า</th>
+                              <th className="text-right px-4 py-2.5 font-medium">จำนวน</th>
+                              <th className="text-right px-4 py-2.5 font-medium">ราคา/หน่วย</th>
+                              <th className="text-right px-4 py-2.5 font-medium">รวม</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {merged.map((it: any, i: number) => (
+                              <tr key={it.id ?? i} className="hover:bg-gray-50">
+                                <td className="px-3 py-3 text-center text-gray-500 text-xs font-mono">{i + 1}</td>
+                                <td className="px-4 py-3 text-gray-900">
+                                  {it.product?.name ?? '-'}
+                                  {it._rows > 1 && <span className="ml-2 text-[10px] text-orange-600">({it._rows} แถว)</span>}
+                                </td>
+                                <td className="px-4 py-3 text-right text-gray-700">{it.quantity} {it.product?.unit ?? ''}</td>
+                                <td className="px-4 py-3 text-right text-gray-700">฿{(it.negotiated_price ?? it.unit_price)?.toLocaleString()}</td>
+                                <td className="px-4 py-3 text-right text-gray-900 font-medium">฿{it.total_price?.toLocaleString()}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </section>
+                )
+              })()}
 
               {/* Totals */}
               <section className="flex justify-end">
