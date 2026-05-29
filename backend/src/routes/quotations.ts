@@ -11,6 +11,23 @@ import { z } from 'zod'
 const router = Router()
 router.use(requireAuth)
 
+/** Can this user view/act on a document created by `createdBy`?
+ *  admin/cfo → all; manager → own team; sales → only own. */
+async function canAccessDoc(
+  user: NonNullable<AuthenticatedRequest['user']>,
+  createdBy: string,
+): Promise<boolean> {
+  if (user.role === 'admin' || user.role === 'cfo') return true
+  if (createdBy === user.id) return true
+  if (user.role === 'manager' && user.team_id) {
+    const { data } = await supabaseAdmin
+      .from('users').select('id')
+      .eq('id', createdBy).eq('team_id', user.team_id).maybeSingle()
+    return !!data
+  }
+  return false
+}
+
 const itemSchema = z.object({
   product_id: z.string().uuid(),
   quantity: z.number().int().positive(),
@@ -96,12 +113,17 @@ router.get('/', asyncHandler(async (req: AuthenticatedRequest, res) => {
   res.json({ data })
 }))
 
-router.get('/:id', asyncHandler(async (req, res) => {
+router.get('/:id', asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { data, error } = await supabaseAdmin
     .from('quotations')
     .select('*, customer:customers(*), creator:users!created_by(first_name, last_name, email, role), items:quotation_items(*, product:products(name, unit, image_url))')
     .eq('id', req.params.id).single()
-  if (error) return res.status(404).json({ error: 'Not found' })
+  if (error || !data) return res.status(404).json({ error: 'Not found' })
+  // Authz: sales sees own, manager sees team, admin/cfo see all.
+  // Return 404 (not 403) so foreign IDs don't leak existence.
+  if (!(await canAccessDoc(req.user!, data.created_by))) {
+    return res.status(404).json({ error: 'Not found' })
+  }
   res.json({ data })
 }))
 
@@ -224,6 +246,10 @@ router.patch('/:id', requireRole('sales', 'manager', 'admin'), asyncHandler(asyn
   if (req.user!.role === 'sales' && existing.created_by !== req.user!.id) {
     return res.status(403).json({ error: 'Forbidden' })
   }
+  // Manager may only edit documents created within their own team.
+  if (req.user!.role === 'manager' && !(await canAccessDoc(req.user!, existing.created_by))) {
+    return res.status(403).json({ error: 'Forbidden' })
+  }
 
   const body = createSchema.parse(req.body)
   const subtotal = body.items.reduce((s, i) => s + (i.negotiated_price ?? i.unit_price) * i.quantity, 0)
@@ -269,6 +295,9 @@ router.patch('/:id', requireRole('sales', 'manager', 'admin'), asyncHandler(asyn
 router.post('/:id/approve', requireRole('manager', 'admin'), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { data: q } = await supabaseAdmin.from('quotations').select('*').eq('id', req.params.id).single()
   if (!q) return res.status(404).json({ error: 'Not found' })
+  if (!(await canAccessDoc(req.user!, q.created_by))) {
+    return res.status(403).json({ error: 'Forbidden' })
+  }
 
   const { data: updated, error: updateError } = await supabaseAdmin.from('quotations').update({
     status: 'approved',
@@ -310,6 +339,9 @@ router.post('/:id/reject', requireRole('manager', 'admin'), asyncHandler(async (
   const { reason } = z.object({ reason: z.string().min(1) }).parse(req.body)
   const { data: q } = await supabaseAdmin.from('quotations').select('*').eq('id', req.params.id).single()
   if (!q) return res.status(404).json({ error: 'Not found' })
+  if (!(await canAccessDoc(req.user!, q.created_by))) {
+    return res.status(403).json({ error: 'Forbidden' })
+  }
 
   await supabaseAdmin.from('quotations').update({
     status: 'rejected', reject_reason: reason,

@@ -72,13 +72,6 @@ export default function CreateQuotationClient({ customers, products, initial }: 
     setItems(newItems)
   }
 
-  // Detect existing duplicates (in case data came from server in this state)
-  const duplicateProductIds = useMemo(() => {
-    const counts: Record<string, number> = {}
-    items.forEach((it) => { if (it.product_id) counts[it.product_id] = (counts[it.product_id] ?? 0) + 1 })
-    return new Set(Object.entries(counts).filter(([, c]) => c > 1).map(([id]) => id))
-  }, [items])
-
   const handleSubmit = async (asDraft: boolean) => {
     setError('')
     if (!customerId) { setError('กรุณาเลือกลูกค้า'); return }

@@ -12,7 +12,7 @@ interface Props {
   orderItems: any[]
 }
 
-export default function AdminReportsClient({ orders, products, customers, orderItems }: Props) {
+export default function AdminReportsClient({ orders, products, orderItems }: Props) {
   const [tab, setTab] = useState<'orders' | 'completed' | 'customers' | 'products' | 'stock'>('orders')
 
   const ordersByStatus = useMemo(() => {

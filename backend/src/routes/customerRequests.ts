@@ -1,11 +1,10 @@
 // src/routes/customerRequests.ts
 import { Router } from 'express'
-import { translateError } from '../lib/translateError'
 import { supabaseAdmin } from '../lib/supabase'
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/auth'
 import { asyncHandler } from '../middleware/errorHandler'
 import { logActivity } from '../lib/activityLog'
-import { notifyRole, notifyUser } from '../lib/notify'
+import { notifyRole } from '../lib/notify'
 import { z } from 'zod'
 
 const router = Router()

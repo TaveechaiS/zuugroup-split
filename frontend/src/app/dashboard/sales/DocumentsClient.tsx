@@ -23,7 +23,7 @@ const O_STATUS: Record<string, { label: string; color: string }> = {
 
 interface Props { quotations: any[]; orders: any[]; basePath?: string }
 
-export default function DocumentsClient({ quotations, orders, basePath = '/dashboard/sales' }: Props) {
+export default function DocumentsClient({ quotations, orders }: Props) {
   const router = useRouter()
   const [tab, setTab] = useState<'all' | 'quotation' | 'order'>('all')
   const [search, setSearch] = useState('')
