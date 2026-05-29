@@ -385,7 +385,7 @@ const STYLES = `
     overflow: hidden;
   }
   .doc * { box-sizing: border-box; }
-  .doc-body { flex: 1; min-height: 0; }
+  .doc-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
   /* Header */
   .header {
@@ -458,12 +458,13 @@ const STYLES = `
     margin-top: 3px;
   }
 
-  /* Footer (notes left + signature right) */
+  /* Footer (notes left + signature right) — pinned to the bottom of every page */
   .footer {
     display: flex;
     justify-content: space-between;
     gap: 24px;
-    margin-top: 8px;
+    margin-top: auto;       /* push to bottom of the page */
+    padding-top: 8px;
   }
   .notes { flex: 1; font-size: 12px; }
   .notes-title { margin-bottom: 3px; }
