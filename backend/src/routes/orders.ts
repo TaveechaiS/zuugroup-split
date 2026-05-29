@@ -11,6 +11,23 @@ import { z } from 'zod'
 const router = Router()
 router.use(requireAuth)
 
+/** Can this user view/act on a document created by `createdBy`?
+ *  admin/cfo → all; manager → own team; sales → only own. */
+async function canAccessDoc(
+  user: NonNullable<AuthenticatedRequest['user']>,
+  createdBy: string,
+): Promise<boolean> {
+  if (user.role === 'admin' || user.role === 'cfo') return true
+  if (createdBy === user.id) return true
+  if (user.role === 'manager' && user.team_id) {
+    const { data } = await supabaseAdmin
+      .from('users').select('id')
+      .eq('id', createdBy).eq('team_id', user.team_id).maybeSingle()
+    return !!data
+  }
+  return false
+}
+
 const itemSchema = z.object({
   product_id: z.string().uuid(),
   quantity: z.number().int().positive(),
@@ -59,12 +76,17 @@ router.get('/', asyncHandler(async (req: AuthenticatedRequest, res) => {
   res.json({ data })
 }))
 
-router.get('/:id', asyncHandler(async (req, res) => {
+router.get('/:id', asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { data, error } = await supabaseAdmin
     .from('orders')
     .select('*, customer:customers(*), creator:users!created_by(first_name, last_name, email, role), items:order_items(*, product:products(name, unit, image_url))')
     .eq('id', req.params.id).single()
-  if (error) return res.status(404).json({ error: 'Not found' })
+  if (error || !data) return res.status(404).json({ error: 'Not found' })
+  // Authz: sales sees own, manager sees team, admin/cfo see all.
+  // Return 404 (not 403) so foreign IDs don't leak existence.
+  if (!(await canAccessDoc(req.user!, data.created_by))) {
+    return res.status(404).json({ error: 'Not found' })
+  }
   res.json({ data })
 }))
 
@@ -180,6 +202,9 @@ router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: Authe
 router.post('/:id/review-pass', requireRole('manager', 'admin'), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const { data: o } = await supabaseAdmin.from('orders').select('*').eq('id', req.params.id).single()
   if (!o) return res.status(404).json({ error: 'Not found' })
+  if (!(await canAccessDoc(req.user!, o.created_by))) {
+    return res.status(403).json({ error: 'Forbidden' })
+  }
 
   await supabaseAdmin.from('orders').update({
     status: 'processing',
@@ -220,6 +245,9 @@ router.post('/:id/review-reject', requireRole('manager', 'admin'), asyncHandler(
   const { reason } = z.object({ reason: z.string().min(1) }).parse(req.body)
   const { data: o } = await supabaseAdmin.from('orders').select('*').eq('id', req.params.id).single()
   if (!o) return res.status(404).json({ error: 'Not found' })
+  if (!(await canAccessDoc(req.user!, o.created_by))) {
+    return res.status(403).json({ error: 'Forbidden' })
+  }
 
   await supabaseAdmin.from('orders').update({
     status: 'rejected',
