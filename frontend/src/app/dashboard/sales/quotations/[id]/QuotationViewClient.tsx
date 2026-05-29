@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowLeft, Download, Edit2 } from 'lucide-react'
+import { ArrowLeft, Download, Edit2, ShoppingCart } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { generateQuotationPdf, buildQuotationHtml, type DocData } from '@/lib/pdf/documentPdf'
 import PdfPreviewModal from '@/components/shared/PdfPreviewModal'
@@ -10,6 +10,7 @@ const STATUS: Record<string, { label: string; color: string }> = {
   draft: { label: 'ฉบับร่าง', color: 'bg-gray-100 text-gray-700' },
   pending: { label: 'รออนุมัติ', color: 'bg-yellow-100 text-yellow-700' },
   approved: { label: 'อนุมัติ', color: 'bg-green-100 text-green-700' },
+  ordered: { label: 'ออกคำสั่งซื้อแล้ว', color: 'bg-purple-100 text-purple-700' },
   rejected: { label: 'ไม่อนุมัติ', color: 'bg-red-100 text-red-700' },
 }
 
@@ -81,6 +82,11 @@ export default function QuotationViewClient({ quotation }: Props) {
             {quotation.status === 'draft' && (
               <button onClick={() => router.push(`/dashboard/sales/quotations/${quotation.id}/edit`)} className="flex items-center gap-2 border border-blue-200 text-blue-700 hover:bg-blue-50 px-4 py-2 rounded-lg text-sm font-medium">
                 <Edit2 size={15} /> แก้ไข
+              </button>
+            )}
+            {quotation.status === 'approved' && (
+              <button onClick={() => router.push(`/dashboard/sales/create-order?fromQuotation=${quotation.id}`)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                <ShoppingCart size={15} /> แปลงเป็นคำสั่งซื้อ
               </button>
             )}
             <button onClick={download} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">

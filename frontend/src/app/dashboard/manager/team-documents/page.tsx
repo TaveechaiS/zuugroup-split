@@ -15,7 +15,7 @@ export default function TeamDocumentsPage() {
   return (
     <div className="flex flex-col h-full">
       <TopBar title="เอกสารทีม" />
-      <DocumentsClient quotations={quotations} orders={orders} />
+      <DocumentsClient quotations={quotations} orders={orders} basePath="/dashboard/manager" />
     </div>
   )
 }

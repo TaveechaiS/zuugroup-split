@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, X, FileText } from 'lucide-react'
+import { Check, X, FileText, ShoppingCart } from 'lucide-react'
 import { quotationsApi } from '@/lib/api/services'
 import { buildQuotationHtml, generateQuotationPdf, type DocData } from '@/lib/pdf/documentPdf'
 import PdfPreviewModal from '@/components/shared/PdfPreviewModal'
@@ -11,6 +11,7 @@ const STATUS_INFO: Record<string, { label: string; color: string }> = {
   draft: { label: 'ฉบับร่าง', color: 'bg-gray-100 text-gray-700' },
   pending: { label: 'รออนุมัติ', color: 'bg-yellow-100 text-yellow-700' },
   approved: { label: 'อนุมัติแล้ว', color: 'bg-green-100 text-green-700' },
+  ordered: { label: 'ออกคำสั่งซื้อแล้ว', color: 'bg-purple-100 text-purple-700' },
   rejected: { label: 'ไม่อนุมัติ', color: 'bg-red-100 text-red-700' },
 }
 
@@ -73,8 +74,8 @@ export default function QuotationApprovalClient({ quotation }: { quotation: any 
       const res = await quotationsApi.approve(quotation.id)
       const newStatus = (res as any)?.data?.status ?? 'approved'
       setCurrentStatus(newStatus)
-      setSuccess('อนุมัติเรียบร้อย')
-      setTimeout(() => { window.location.href = '/dashboard/manager/quotations-pending' }, 800)
+      setSuccess('อนุมัติเรียบร้อย — กด "แปลงเป็นคำสั่งซื้อ" เพื่อออกคำสั่งซื้อต่อได้เลย')
+      setSaving(false)
     } catch (err: any) { setError(err.message || 'อนุมัติไม่สำเร็จ'); setSaving(false) }
   }
 
@@ -170,7 +171,14 @@ export default function QuotationApprovalClient({ quotation }: { quotation: any 
         {currentStatus !== 'pending' ? (
           <div className="bg-white rounded-xl border border-gray-100 p-5 text-center">
             <p className="text-sm text-gray-600">สถานะปัจจุบัน: <span className="font-semibold">{statusInfo.label}</span></p>
-            <button onClick={() => router.push('/dashboard/manager/quotations-pending')} className="mt-3 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">กลับไปหน้ารายการ</button>
+            <div className="mt-3 flex flex-wrap gap-2 justify-center">
+              {currentStatus === 'approved' && (
+                <button onClick={() => router.push(`/dashboard/manager/create-order?fromQuotation=${quotation.id}`)} className="inline-flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium">
+                  <ShoppingCart size={15} /> แปลงเป็นคำสั่งซื้อ
+                </button>
+              )}
+              <button onClick={() => router.push('/dashboard/manager/quotations-pending')} className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">กลับไปหน้ารายการ</button>
+            </div>
           </div>
         ) : !showReject ? (
           <div className="flex gap-3 justify-end">

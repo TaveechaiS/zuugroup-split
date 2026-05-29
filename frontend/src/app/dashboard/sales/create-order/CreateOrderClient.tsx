@@ -2,16 +2,26 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, FileText } from 'lucide-react'
 import { ordersApi, customersApi } from '@/lib/api/services'
 
-interface Props { customers: any[]; products: any[] }
+interface PrefillItem { product_id: string; quantity: number; unit_price: number; product_name?: string }
+interface Prefill {
+  customerId: string
+  sourceQuotationId: string
+  quotationNumber?: string
+  items: PrefillItem[]
+}
+interface Props { customers: any[]; products: any[]; prefill?: Prefill }
 interface OrderItem { product_id: string; quantity: number; unit_price: number }
 
-export default function CreateOrderClient({ customers, products }: Props) {
+export default function CreateOrderClient({ customers, products, prefill }: Props) {
   const router = useRouter()
-  const [customerId, setCustomerId] = useState('')
-  const [items, setItems] = useState<OrderItem[]>([])
+  const sourceQuotationId = prefill?.sourceQuotationId
+  const [customerId, setCustomerId] = useState(prefill?.customerId ?? '')
+  const [items, setItems] = useState<OrderItem[]>(
+    (prefill?.items ?? []).map((i) => ({ product_id: i.product_id, quantity: i.quantity, unit_price: i.unit_price }))
+  )
   const [customerPrices, setCustomerPrices] = useState<Record<string, number>>({})
   const [vatPercent, setVatPercent] = useState(7)
   const [includeVat, setIncludeVat] = useState(true)
@@ -26,6 +36,24 @@ export default function CreateOrderClient({ customers, products }: Props) {
   const [error, setError] = useState('')
 
   const selectedCustomer = customers.find((c) => c.id === customerId)
+
+  // Group the product picker: products from the source quotation appear first,
+  // the rest under "สินค้าอื่น ๆ". Only when this order is built from a quotation.
+  const quotedProductIds = useMemo(
+    () => new Set((prefill?.items ?? []).map((i) => i.product_id)),
+    [prefill],
+  )
+  const groupedProducts = useMemo(() => {
+    if (!prefill || quotedProductIds.size === 0) return null
+    return {
+      quoted: products.filter((p) => quotedProductIds.has(p.id)),
+      others: products.filter((p) => !quotedProductIds.has(p.id)),
+    }
+  }, [products, prefill, quotedProductIds])
+
+  const productOption = (p: any) => (
+    <option key={p.id} value={p.id}>{p.name} (คงเหลือ: {p.quantity} {p.unit ?? ''})</option>
+  )
 
   useEffect(() => {
     if (!customerId) { setCustomerPrices({}); return }
@@ -94,6 +122,7 @@ export default function CreateOrderClient({ customers, products }: Props) {
         other_label: hasOther ? otherLabel || null : null,
         other_amount: hasOther ? otherAmt : 0,
         show_tax_id: showTaxId,
+        source_quotation_id: sourceQuotationId ?? null,
         notes: notes || undefined,
         status: asDraft ? 'draft' : 'pending_review',
       })
@@ -110,6 +139,31 @@ export default function CreateOrderClient({ customers, products }: Props) {
     <div className="p-4 sm:p-6">
       <div className="max-w-5xl mx-auto space-y-5">
         {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
+
+        {prefill && (
+          <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1.5">
+              <FileText size={16} className="text-indigo-600 shrink-0" />
+              <p className="text-sm font-semibold text-indigo-900">
+                สินค้าจากใบเสนอราคา{prefill.quotationNumber ? ` ${prefill.quotationNumber}` : ''}
+              </p>
+            </div>
+            <p className="text-xs text-indigo-700 mb-2">
+              รายการด้านล่างถูกเติมจากใบเสนอราคาที่อนุมัติแล้ว — ปรับแก้จำนวน เพิ่ม หรือลบได้ก่อนส่งคำสั่งซื้อ
+            </p>
+            <p className="text-xs text-indigo-800 bg-indigo-100 rounded-md px-2.5 py-1.5 mb-3">
+              ℹ️ คำสั่งซื้อนี้แปลงจากใบเสนอราคาที่อนุมัติแล้ว จะ<span className="font-semibold">ข้ามขั้นตรวจสอบ</span> ส่งไปยัง<span className="font-semibold">ขั้นยืนยันการขาย</span>โดยตรง
+            </p>
+            <div className="space-y-1 bg-white/60 rounded-lg p-3">
+              {prefill.items.map((it, i) => (
+                <div key={i} className="flex justify-between gap-3 text-sm">
+                  <span className="text-gray-800">{it.product_name ?? '-'}</span>
+                  <span className="text-gray-500 shrink-0">{it.quantity} × ฿{it.unit_price.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="bg-white rounded-xl border border-gray-100 p-5">
           <h3 className="font-semibold text-gray-900 mb-4">ข้อมูลคำสั่งซื้อ</h3>
@@ -156,7 +210,14 @@ export default function CreateOrderClient({ customers, products }: Props) {
                     <select value={item.product_id} onChange={(e) => updateItem(idx, 'product_id', e.target.value)}
                       className="col-span-5 px-2 py-1.5 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white">
                       <option value="">-- เลือกสินค้า --</option>
-                      {products.map((p) => <option key={p.id} value={p.id}>{p.name} (คงเหลือ: {p.quantity} {p.unit ?? ''})</option>)}
+                      {groupedProducts ? (
+                        <>
+                          <optgroup label="สินค้าจากใบเสนอราคา">{groupedProducts.quoted.map(productOption)}</optgroup>
+                          <optgroup label="สินค้าอื่น ๆ">{groupedProducts.others.map(productOption)}</optgroup>
+                        </>
+                      ) : (
+                        products.map(productOption)
+                      )}
                     </select>
                     <input type="number" min="1" value={item.quantity}
                       onChange={(e) => updateItem(idx, 'quantity', Number(e.target.value))}

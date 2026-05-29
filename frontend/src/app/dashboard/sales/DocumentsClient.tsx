@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Download, Eye, Edit2, X, FileText } from 'lucide-react'
+import { Search, Download, Eye, Edit2, X, FileText, ShoppingCart } from 'lucide-react'
 import { generateQuotationPdf, generateOrderPdf, buildQuotationHtml, buildOrderHtml, type DocData } from '@/lib/pdf/documentPdf'
 import { quotationsApi, ordersApi } from '@/lib/api/services'
 import PdfPreviewModal from '@/components/shared/PdfPreviewModal'
@@ -11,6 +11,7 @@ const Q_STATUS: Record<string, { label: string; color: string }> = {
   draft: { label: 'ฉบับร่าง', color: 'bg-gray-100 text-gray-700' },
   pending: { label: 'รออนุมัติ', color: 'bg-yellow-100 text-yellow-700' },
   approved: { label: 'อนุมัติ', color: 'bg-green-100 text-green-700' },
+  ordered: { label: 'ออกคำสั่งซื้อแล้ว', color: 'bg-purple-100 text-purple-700' },
   rejected: { label: 'ไม่อนุมัติ', color: 'bg-red-100 text-red-700' },
 }
 const O_STATUS: Record<string, { label: string; color: string }> = {
@@ -23,7 +24,7 @@ const O_STATUS: Record<string, { label: string; color: string }> = {
 
 interface Props { quotations: any[]; orders: any[]; basePath?: string }
 
-export default function DocumentsClient({ quotations, orders }: Props) {
+export default function DocumentsClient({ quotations, orders, basePath = '/dashboard/sales' }: Props) {
   const router = useRouter()
   const [tab, setTab] = useState<'all' | 'quotation' | 'order'>('all')
   const [search, setSearch] = useState('')
@@ -137,6 +138,12 @@ export default function DocumentsClient({ quotations, orders }: Props) {
     if (doc.type === 'quotation') router.push(`/dashboard/sales/quotations/${doc.id}/edit`)
   }
 
+  // Convert an approved quotation into an order. Routes to the create-order
+  // page that matches the current role (basePath), pre-filled from the quotation.
+  const convertToOrder = (doc: any) => {
+    router.push(`${basePath}/create-order?fromQuotation=${doc.id}`)
+  }
+
   return (
     <div className="p-4 sm:p-6">
       <div className="bg-white rounded-xl border border-gray-100">
@@ -203,6 +210,11 @@ export default function DocumentsClient({ quotations, orders }: Props) {
                     {doc.type === 'quotation' && doc.status === 'draft' && (
                       <button onClick={() => editDraft(doc)} className="text-gray-400 hover:text-blue-600 p-1.5 rounded transition" title="แก้ไขฉบับร่าง">
                         <Edit2 size={15} />
+                      </button>
+                    )}
+                    {doc.type === 'quotation' && doc.status === 'approved' && (
+                      <button onClick={() => convertToOrder(doc)} className="text-indigo-500 hover:text-indigo-700 p-1.5 rounded transition" title="แปลงเป็นคำสั่งซื้อ">
+                        <ShoppingCart size={15} />
                       </button>
                     )}
                     <button onClick={() => openDetail(doc)} className="text-gray-400 hover:text-blue-600 p-1.5 rounded transition" title="ดูข้อมูล">

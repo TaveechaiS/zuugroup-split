@@ -44,6 +44,7 @@ const createSchema = z.object({
   other_label: z.string().optional().nullable(),
   other_amount: z.number().default(0),
   show_tax_id: z.boolean().default(true),
+  source_quotation_id: z.string().uuid().nullable().optional(),
   notes: z.string().optional(),
   status: z.enum(['draft', 'pending_review']).default('pending_review'),
 })
@@ -95,6 +96,25 @@ router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: Authe
   const body = createSchema.parse(req.body)
   const isDraft = body.status === 'draft'
 
+  // === Source quotation validation (when converting an approved quotation) ===
+  // Must exist, be accessible to this user, and be in 'approved' status.
+  if (body.source_quotation_id) {
+    const { data: srcQ } = await supabaseAdmin
+      .from('quotations').select('id, status, created_by, quotation_number')
+      .eq('id', body.source_quotation_id).maybeSingle()
+    if (!srcQ) return res.status(404).json({ error: 'ไม่พบใบเสนอราคาต้นทาง' })
+    if (!(await canAccessDoc(req.user!, srcQ.created_by))) {
+      return res.status(403).json({ error: 'ไม่มีสิทธิ์ใช้ใบเสนอราคานี้' })
+    }
+    if (srcQ.status !== 'approved') {
+      return res.status(400).json({
+        error: srcQ.status === 'ordered'
+          ? 'ใบเสนอราคานี้ออกคำสั่งซื้อไปแล้ว'
+          : 'ใบเสนอราคาต้องได้รับการอนุมัติก่อน จึงจะออกคำสั่งซื้อได้',
+      })
+    }
+  }
+
   // === Stock validation (skip for drafts) ===
   if (!isDraft) {
     const productIds = body.items.map((i) => i.product_id)
@@ -130,8 +150,19 @@ router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: Authe
   // New workflow: every order ends at admin confirming → 'completed'.
   // Manager creating an order still goes to pending_review (admin will confirm).
   // Manager just gets the reviewed_by/at stamps set as if they reviewed it.
+  //
+  // Orders converted from an APPROVED quotation skip the manager review step
+  // ('pending_review') entirely — the manager already approved the same items &
+  // prices on the quotation, so re-reviewing would be duplicate work. They go
+  // straight to 'processing', i.e. ready for the admin to confirm the sale.
   const autoApprove = req.user!.role === 'manager'
-  const finalStatus = isDraft ? 'draft' : 'pending_review'
+  const fromApprovedQuotation = !!body.source_quotation_id // validated as 'approved' above
+  const finalStatus = isDraft
+    ? 'draft'
+    : fromApprovedQuotation
+      ? 'processing'
+      : 'pending_review'
+  const stampReviewed = autoApprove || fromApprovedQuotation
 
   const { data: order, error } = await supabaseAdmin
     .from('orders')
@@ -148,10 +179,11 @@ router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: Authe
       vat_amount,
       total_amount: total,
       show_tax_id: body.show_tax_id,
+      source_quotation_id: body.source_quotation_id ?? null,
       notes: body.notes ?? null,
       status: finalStatus,
-      reviewed_by: autoApprove ? req.user!.id : null,
-      reviewed_at: autoApprove ? new Date().toISOString() : null,
+      reviewed_by: stampReviewed ? req.user!.id : null,
+      reviewed_at: stampReviewed ? new Date().toISOString() : null,
     })
     .select().single()
 
@@ -166,6 +198,20 @@ router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: Authe
       total_price: i.unit_price * i.quantity,
     }))
   )
+
+  // Mark the source quotation as 'ordered' once a real (non-draft) order is created from it.
+  if (body.source_quotation_id && !isDraft) {
+    await supabaseAdmin.from('quotations')
+      .update({ status: 'ordered', updated_at: new Date().toISOString() })
+      .eq('id', body.source_quotation_id)
+    await logActivity({
+      userId: req.user!.id,
+      action: 'quotation.convert_to_order',
+      entityType: 'quotation',
+      entityId: body.source_quotation_id,
+      description: `ออกคำสั่งซื้อ ${order.order_number} จากใบเสนอราคา`,
+    })
+  }
 
   await logActivity({
     userId: req.user!.id,
@@ -191,6 +237,17 @@ router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: Authe
     await notifyRole('admin', {
       title: 'มีคำสั่งซื้อรอยืนยันการขาย (จากผู้จัดการ)',
       message: `ผู้จัดการสร้างคำสั่งซื้อ ${order.order_number} (฿${total.toLocaleString()}) — พร้อมยืนยันการขาย`,
+      type: 'info',
+      entityType: 'order',
+      entityId: order.id,
+    })
+  }
+  // Orders converted from an approved quotation skip review and land in
+  // 'processing' → notify admins straight away to confirm the sale.
+  if (finalStatus === 'processing') {
+    await notifyRole('admin', {
+      title: 'คำสั่งซื้อพร้อมยืนยันการขาย (จากใบเสนอราคาที่อนุมัติแล้ว)',
+      message: `คำสั่งซื้อ ${order.order_number} (฿${total.toLocaleString()}) แปลงจากใบเสนอราคาที่อนุมัติแล้ว — ข้ามขั้นตรวจสอบ พร้อมยืนยันการขาย`,
       type: 'info',
       entityType: 'order',
       entityId: order.id,

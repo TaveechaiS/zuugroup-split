@@ -15,7 +15,7 @@ export default function ManagerMyDocsPage() {
   return (
     <div className="flex flex-col h-full">
       <TopBar title="เอกสารของฉัน" />
-      <DocumentsClient quotations={quotations} orders={orders} />
+      <DocumentsClient quotations={quotations} orders={orders} basePath="/dashboard/manager" />
     </div>
   )
 }
