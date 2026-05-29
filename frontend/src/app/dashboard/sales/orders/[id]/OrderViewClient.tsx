@@ -30,6 +30,7 @@ export default function OrderViewClient({ order }: Props) {
       contact_name: order.customer?.contact_name,
       phone: order.customer?.phone,
       email: order.customer?.email,
+      tax_id: order.customer?.tax_id,
       drug_license_number: order.customer?.drug_license_number,
     },
     creator: order.creator,
@@ -51,6 +52,7 @@ export default function OrderViewClient({ order }: Props) {
     other_amount: order.other_amount,
     total_amount: order.total_amount,
     notes: order.notes,
+    show_tax_id: order.show_tax_id,
   })
 
   const download = () => setPreviewHtml(buildOrderHtml(buildData()))

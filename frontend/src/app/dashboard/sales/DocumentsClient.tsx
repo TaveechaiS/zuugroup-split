@@ -90,6 +90,7 @@ export default function DocumentsClient({ quotations, orders }: Props) {
           contact_name: full.customer?.contact_name,
           phone: full.customer?.phone,
           email: full.customer?.email,
+          tax_id: full.customer?.tax_id,
           drug_license_number: full.customer?.drug_license_number,
         },
         creator: full.creator,
@@ -112,6 +113,7 @@ export default function DocumentsClient({ quotations, orders }: Props) {
         total_amount: full.total_amount,
         notes: full.notes,
         contract_period_days: full.contract_period_days,
+        show_tax_id: full.show_tax_id,
       }
 
       const html = isQuotation ? buildQuotationHtml(pdfData) : buildOrderHtml(pdfData)

@@ -29,6 +29,7 @@ export default function QuotationViewClient({ quotation }: Props) {
       contact_name: quotation.customer?.contact_name,
       phone: quotation.customer?.phone,
       email: quotation.customer?.email,
+      tax_id: quotation.customer?.tax_id,
       drug_license_number: quotation.customer?.drug_license_number,
     },
     creator: quotation.creator,
@@ -51,6 +52,7 @@ export default function QuotationViewClient({ quotation }: Props) {
     total_amount: quotation.total_amount,
     notes: quotation.notes,
     contract_period_days: quotation.contract_period_days,
+    show_tax_id: quotation.show_tax_id,
   })
 
   const download = () => setPreviewHtml(buildQuotationHtml(buildData()))

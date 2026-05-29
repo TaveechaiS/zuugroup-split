@@ -2,8 +2,10 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, X, ArrowLeft, Edit2 } from 'lucide-react'
+import { Check, X, ArrowLeft, Edit2, FileText } from 'lucide-react'
 import { ordersApi } from '@/lib/api/services'
+import { buildOrderHtml, generateOrderPdf, type DocData } from '@/lib/pdf/documentPdf'
+import PdfPreviewModal from '@/components/shared/PdfPreviewModal'
 
 const STATUS: Record<string, { label: string; color: string }> = {
   pending_review: { label: 'รอตรวจสอบ', color: 'bg-yellow-100 text-yellow-700' },
@@ -22,6 +24,49 @@ export default function OrderDetailClient({ order: initialOrder }: { order: any 
   const [error, setError] = useState('')
   const [editingNumber, setEditingNumber] = useState(false)
   const [editNumber, setEditNumber] = useState(order.order_number ?? '')
+  const [previewPdf, setPreviewPdf] = useState<{ html: string; filename: string; title: string; data: DocData } | null>(null)
+
+  const openPdf = () => {
+    const data: DocData = {
+      number: order.order_number,
+      createdAt: order.created_at,
+      customer: {
+        company_name: order.customer?.company_name ?? '-',
+        address: order.customer?.address,
+        contact_name: order.customer?.contact_name,
+        phone: order.customer?.phone,
+        email: order.customer?.email,
+        tax_id: order.customer?.tax_id,
+        drug_license_number: order.customer?.drug_license_number,
+      },
+      creator: order.creator,
+      items: (order.items ?? []).map((it: any) => ({
+        name: it.product?.name ?? '-',
+        quantity: it.quantity,
+        unit: it.product?.unit,
+        unit_price: it.negotiated_price ?? it.unit_price,
+        total_price: it.total_price,
+        image_url: it.product?.image_url,
+      })),
+      subtotal: order.subtotal,
+      vat_percent: order.vat_percent,
+      vat_amount: order.vat_amount,
+      include_vat: order.include_vat,
+      discount_percent: order.discount_percent,
+      discount_amount: order.discount_amount,
+      other_label: order.other_label,
+      other_amount: order.other_amount,
+      total_amount: order.total_amount,
+      notes: order.notes,
+      show_tax_id: order.show_tax_id,
+    }
+    setPreviewPdf({
+      html: buildOrderHtml(data),
+      filename: `${order.order_number}.pdf`,
+      title: `คำสั่งซื้อ ${order.order_number}`,
+      data,
+    })
+  }
 
   const saveOrderNumber = async () => {
     setSaving(true); setError('')
@@ -99,7 +144,12 @@ export default function OrderDetailClient({ order: initialOrder }: { order: any 
               )}
               <p className="text-sm text-gray-500 mt-1">{new Date(order.created_at).toLocaleString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
             </div>
-            <span className={`px-3 py-1 rounded-full text-xs font-medium ${STATUS[order.status]?.color}`}>{STATUS[order.status]?.label}</span>
+            <div className="flex items-center gap-2 shrink-0">
+              <button onClick={openPdf} className="inline-flex items-center gap-1.5 border border-blue-200 text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-lg text-xs font-medium">
+                <FileText size={14} /> ดู / โหลด PDF
+              </button>
+              <span className={`px-3 py-1 rounded-full text-xs font-medium ${STATUS[order.status]?.color}`}>{STATUS[order.status]?.label}</span>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
@@ -178,6 +228,16 @@ export default function OrderDetailClient({ order: initialOrder }: { order: any 
           </div>
         )}
       </div>
+
+      {previewPdf && (
+        <PdfPreviewModal
+          html={previewPdf.html}
+          filename={previewPdf.filename}
+          title={previewPdf.title}
+          onClose={() => setPreviewPdf(null)}
+          generatePdf={() => generateOrderPdf(previewPdf.data)}
+        />
+      )}
     </div>
   )
 }

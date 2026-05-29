@@ -43,6 +43,7 @@ const createSchema = z.object({
   discount_amount: z.number().nonnegative().default(0),
   other_label: z.string().optional().nullable(),
   other_amount: z.number().default(0),
+  show_tax_id: z.boolean().default(true),
   notes: z.string().optional(),
   status: z.enum(['draft', 'pending_review']).default('pending_review'),
 })
@@ -146,6 +147,7 @@ router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: Authe
       other_amount: body.other_amount,
       vat_amount,
       total_amount: total,
+      show_tax_id: body.show_tax_id,
       notes: body.notes ?? null,
       status: finalStatus,
       reviewed_by: autoApprove ? req.user!.id : null,

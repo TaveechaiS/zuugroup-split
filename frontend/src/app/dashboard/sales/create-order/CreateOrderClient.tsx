@@ -21,8 +21,11 @@ export default function CreateOrderClient({ customers, products }: Props) {
   const [otherLabel, setOtherLabel] = useState('')
   const [otherAmt, setOtherAmt] = useState(0)
   const [notes, setNotes] = useState('')
+  const [showTaxId, setShowTaxId] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  const selectedCustomer = customers.find((c) => c.id === customerId)
 
   useEffect(() => {
     if (!customerId) { setCustomerPrices({}); return }
@@ -90,6 +93,7 @@ export default function CreateOrderClient({ customers, products }: Props) {
         discount_amount: discountAmt,
         other_label: hasOther ? otherLabel || null : null,
         other_amount: hasOther ? otherAmt : 0,
+        show_tax_id: showTaxId,
         notes: notes || undefined,
         status: asDraft ? 'draft' : 'pending_review',
       })
@@ -180,7 +184,29 @@ export default function CreateOrderClient({ customers, products }: Props) {
 
         <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
           <div className="space-y-3">
-            <label className="flex items-center gap-2 text-sm">
+            <label
+              className={`flex items-center gap-2 text-sm ${selectedCustomer?.tax_id ? '' : 'cursor-help'}`}
+              title={
+                selectedCustomer?.tax_id
+                  ? undefined
+                  : customerId
+                    ? 'ลูกค้ารายนี้ยังไม่มีเลขผู้เสียภาษีในระบบ — เพิ่มได้ที่หน้าข้อมูลลูกค้า'
+                    : 'กรุณาเลือกลูกค้าก่อน จึงจะแสดงเลขผู้เสียภาษี'
+              }
+            >
+              <input
+                type="checkbox"
+                checked={showTaxId && !!selectedCustomer?.tax_id}
+                disabled={!selectedCustomer?.tax_id}
+                onChange={(e) => setShowTaxId(e.target.checked)}
+                className="rounded text-blue-600 disabled:opacity-50"
+              />
+              <span className={selectedCustomer?.tax_id ? 'text-gray-700' : 'text-gray-400'}>
+                แสดงเลขผู้เสียภาษีของลูกค้าในเอกสาร
+              </span>
+            </label>
+
+            <label className="flex items-center gap-2 text-sm border-t border-gray-100 pt-3">
               <input type="checkbox" checked={includeVat} onChange={(e) => setIncludeVat(e.target.checked)} className="rounded text-blue-600" />
               <span className="text-gray-700">รวมภาษี VAT</span>
               {includeVat && (

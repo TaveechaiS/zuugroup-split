@@ -2,8 +2,10 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, X } from 'lucide-react'
+import { Check, X, FileText } from 'lucide-react'
 import { quotationsApi } from '@/lib/api/services'
+import { buildQuotationHtml, generateQuotationPdf, type DocData } from '@/lib/pdf/documentPdf'
+import PdfPreviewModal from '@/components/shared/PdfPreviewModal'
 
 const STATUS_INFO: Record<string, { label: string; color: string }> = {
   draft: { label: 'ฉบับร่าง', color: 'bg-gray-100 text-gray-700' },
@@ -20,6 +22,50 @@ export default function QuotationApprovalClient({ quotation }: { quotation: any 
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [currentStatus, setCurrentStatus] = useState(quotation.status)
+  const [previewPdf, setPreviewPdf] = useState<{ html: string; filename: string; title: string; data: DocData } | null>(null)
+
+  const openPdf = () => {
+    const data: DocData = {
+      number: quotation.quotation_number,
+      createdAt: quotation.created_at,
+      customer: {
+        company_name: quotation.customer?.company_name ?? '-',
+        address: quotation.customer?.address,
+        contact_name: quotation.customer?.contact_name,
+        phone: quotation.customer?.phone,
+        email: quotation.customer?.email,
+        tax_id: quotation.customer?.tax_id,
+        drug_license_number: quotation.customer?.drug_license_number,
+      },
+      creator: quotation.creator,
+      items: (quotation.items ?? []).map((it: any) => ({
+        name: it.product?.name ?? '-',
+        quantity: it.quantity,
+        unit: it.product?.unit,
+        unit_price: it.negotiated_price ?? it.unit_price,
+        total_price: it.total_price,
+        image_url: it.product?.image_url,
+      })),
+      subtotal: quotation.subtotal,
+      vat_percent: quotation.vat_percent,
+      vat_amount: quotation.vat_amount,
+      include_vat: quotation.include_vat,
+      discount_percent: quotation.discount_percent,
+      discount_amount: quotation.discount_amount,
+      other_label: quotation.other_label,
+      other_amount: quotation.other_amount,
+      total_amount: quotation.total_amount,
+      notes: quotation.notes,
+      contract_period_days: quotation.contract_period_days,
+      show_tax_id: quotation.show_tax_id,
+    }
+    setPreviewPdf({
+      html: buildQuotationHtml(data),
+      filename: `${quotation.quotation_number}.pdf`,
+      title: `ใบเสนอราคา ${quotation.quotation_number}`,
+      data,
+    })
+  }
 
   const approve = async () => {
     setSaving(true); setError(''); setSuccess('')
@@ -57,7 +103,12 @@ export default function QuotationApprovalClient({ quotation }: { quotation: any 
               <h2 className="text-lg font-bold text-gray-900">ใบเสนอราคา {quotation.quotation_number}</h2>
               <p className="text-sm text-gray-500 mt-1">{new Date(quotation.created_at).toLocaleString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
             </div>
-            <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>{statusInfo.label}</span>
+            <div className="flex items-center gap-2 shrink-0">
+              <button onClick={openPdf} className="inline-flex items-center gap-1.5 border border-blue-200 text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-lg text-xs font-medium">
+                <FileText size={14} /> ดู / โหลด PDF
+              </button>
+              <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>{statusInfo.label}</span>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
@@ -138,6 +189,16 @@ export default function QuotationApprovalClient({ quotation }: { quotation: any 
           </div>
         )}
       </div>
+
+      {previewPdf && (
+        <PdfPreviewModal
+          html={previewPdf.html}
+          filename={previewPdf.filename}
+          title={previewPdf.title}
+          onClose={() => setPreviewPdf(null)}
+          generatePdf={() => generateQuotationPdf(previewPdf.data)}
+        />
+      )}
     </div>
   )
 }

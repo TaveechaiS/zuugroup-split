@@ -27,6 +27,7 @@ export default function CreateQuotationClient({ customers, products, initial }: 
   const [hasOther, setHasOther] = useState<boolean>(!!(initial?.other_label || initial?.other_amount))
   const [notes, setNotes] = useState(initial?.notes ?? '')
   const [contractDays, setContractDays] = useState(initial?.contract_period_days ?? 30)
+  const [showTaxId, setShowTaxId] = useState<boolean>(initial?.show_tax_id ?? true)
   const [items, setItems] = useState<LineItem[]>(
     (initial?.items ?? []).map((it: any) => ({
       product_id: it.product_id,
@@ -90,6 +91,7 @@ export default function CreateQuotationClient({ customers, products, initial }: 
         other_amount: hasOther ? otherAmt : 0,
         notes,
         contract_period_days: contractDays,
+        show_tax_id: showTaxId,
         status: asDraft ? 'draft' : 'pending',
         items: items.map((i) => ({
           product_id: i.product_id,
@@ -186,7 +188,31 @@ export default function CreateQuotationClient({ customers, products, initial }: 
         <div className="bg-white rounded-xl border border-gray-100 p-5">
           <h3 className="font-semibold text-gray-900 mb-4">รายละเอียดเพิ่มเติม</h3>
           <div className="space-y-3 mb-4">
-            <label className="flex items-center gap-2 text-sm">
+            <div>
+              <label
+                className={`flex items-center gap-2 text-sm ${selectedCustomer?.tax_id ? '' : 'cursor-help'}`}
+                title={
+                  selectedCustomer?.tax_id
+                    ? undefined
+                    : customerId
+                      ? 'ลูกค้ารายนี้ยังไม่มีเลขผู้เสียภาษีในระบบ — เพิ่มได้ที่หน้าข้อมูลลูกค้า'
+                      : 'กรุณาเลือกลูกค้าก่อน จึงจะแสดงเลขผู้เสียภาษี'
+                }
+              >
+                <input
+                  type="checkbox"
+                  checked={showTaxId && !!selectedCustomer?.tax_id}
+                  disabled={!selectedCustomer?.tax_id}
+                  onChange={(e) => setShowTaxId(e.target.checked)}
+                  className="rounded text-blue-600 disabled:opacity-50"
+                />
+                <span className={selectedCustomer?.tax_id ? 'text-gray-700' : 'text-gray-400'}>
+                  แสดงเลขผู้เสียภาษีของลูกค้าในเอกสาร
+                </span>
+              </label>
+            </div>
+
+            <label className="flex items-center gap-2 text-sm border-t border-gray-100 pt-3">
               <input type="checkbox" checked={includeVat} onChange={(e) => setIncludeVat(e.target.checked)} className="rounded text-blue-600" />
               <span className="text-gray-700">รวมภาษี VAT</span>
               {includeVat && (

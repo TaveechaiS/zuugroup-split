@@ -100,6 +100,7 @@ export interface DocData {
   total_amount: number
   notes?: string
   contract_period_days?: number
+  show_tax_id?: boolean
 }
 
 const fmt = (n: number) =>
@@ -277,7 +278,7 @@ function buildPageHtml(
       ${data.customer.contact_name ? `<div class="row"><span class="lbl">ผู้ติดต่อ</span>${esc(data.customer.contact_name)}</div>` : ''}
       <div class="row"><span class="lbl">ที่อยู่</span>${esc(data.customer.address ?? '')}</div>
       <div class="row"><span class="lbl">โทรศัพท์</span>${esc(data.customer.phone ?? '')}</div>
-      <div class="row"><span class="lbl">เลขประจำตัวผู้เสียภาษี :</span>${esc(taxId)}</div>
+      ${data.show_tax_id !== false && taxId ? `<div class="row"><span class="lbl">เลขประจำตัวผู้เสียภาษี :</span>${esc(taxId)}</div>` : ''}
     </div>
     <div class="subtitle">บริษัทฯ มีความยินดีที่จะเสนอราคาสินค้า  ดังต่อไปนี้</div>
   ` : ''

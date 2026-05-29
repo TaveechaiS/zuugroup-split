@@ -44,6 +44,7 @@ const createSchema = z.object({
   other_label: z.string().optional().nullable(),
   other_amount: z.number().default(0),
   contract_period_days: z.number().int().nonnegative().nullable().optional(),
+  show_tax_id: z.boolean().default(true),
   notes: z.string().optional(),
   status: z.enum(['draft', 'pending']).default('pending'),
   items: z.array(itemSchema).min(1),
@@ -161,6 +162,7 @@ router.post('/', requireRole('sales', 'manager'), asyncHandler(async (req: Authe
       total_amount,
       notes: body.notes,
       contract_period_days: body.contract_period_days,
+      show_tax_id: body.show_tax_id,
       status: finalStatus,
       approved_by: autoApprove ? req.user!.id : null,
       approved_at: autoApprove ? new Date().toISOString() : null,
@@ -264,6 +266,7 @@ router.patch('/:id', requireRole('sales', 'manager', 'admin'), asyncHandler(asyn
     total_amount,
     notes: body.notes,
     contract_period_days: body.contract_period_days,
+    show_tax_id: body.show_tax_id,
     status: body.status,
     updated_at: new Date().toISOString(),
   }).eq('id', req.params.id)
