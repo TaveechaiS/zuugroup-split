@@ -22,11 +22,20 @@ const O_STATUS: Record<string, { label: string; color: string }> = {
   rejected: { label: 'ไม่ผ่าน', color: 'bg-red-100 text-red-700' },
 }
 
+// Which statuses count as "finished work" (used by the active/finished filter).
+// Approved quotations are still ACTIVE — you may still convert them to an order.
+const FINISHED_STATUS: Record<string, Set<string>> = {
+  quotation: new Set(['ordered', 'rejected']),
+  order: new Set(['completed', 'cancelled', 'rejected']),
+}
+const isFinished = (d: any) => FINISHED_STATUS[d.type]?.has(d.status) ?? false
+
 interface Props { quotations: any[]; orders: any[]; basePath?: string }
 
 export default function DocumentsClient({ quotations, orders, basePath = '/dashboard/sales' }: Props) {
   const router = useRouter()
   const [tab, setTab] = useState<'all' | 'quotation' | 'order'>('all')
+  const [phase, setPhase] = useState<'active' | 'finished' | 'all'>('active')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [previewPdf, setPreviewPdf] = useState<{ html: string; filename: string; title: string; data: DocData; isQuotation: boolean } | null>(null)
@@ -47,11 +56,28 @@ export default function DocumentsClient({ quotations, orders, basePath = '/dashb
   }
 
   const combined = useMemo(() => {
-    const q = quotations.map((x) => ({ ...x, type: 'quotation' as const, number: x.quotation_number, statusInfo: Q_STATUS[x.status] }))
-    const o = orders.map((x) => ({ ...x, type: 'order' as const, number: x.order_number, statusInfo: O_STATUS[x.status] }))
+    const q: any[] = quotations.map((x) => ({ ...x, type: 'quotation' as const, number: x.quotation_number, statusInfo: Q_STATUS[x.status] }))
+    const o: any[] = orders.map((x) => ({ ...x, type: 'order' as const, number: x.order_number, statusInfo: O_STATUS[x.status] }))
+
+    // Cross-reference quotation <-> order via orders.source_quotation_id, so each
+    // row can show & link to its related document.
+    const qById = new Map(q.map((d) => [d.id, d]))
+    const orderBySrcQ = new Map(o.filter((d) => d.source_quotation_id).map((d) => [d.source_quotation_id, d]))
+    for (const d of o) {
+      if (d.source_quotation_id) {
+        const src = qById.get(d.source_quotation_id)
+        d.relatedRef = { type: 'quotation', id: d.source_quotation_id, number: src?.number ?? null, doc: src ?? null }
+      } else d.relatedRef = null
+    }
+    for (const d of q) {
+      const ord = orderBySrcQ.get(d.id)
+      d.relatedRef = ord ? { type: 'order', id: ord.id, number: ord.number, doc: ord } : null
+    }
+
     return [...q, ...o]
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .filter((d) => tab === 'all' || d.type === tab)
+      .filter((d) => phase === 'all' || (phase === 'finished' ? isFinished(d) : !isFinished(d)))
       .filter((d) => statusFilter === 'all' || d.status === statusFilter)
       .filter((d) => {
         const haystack = [
@@ -63,7 +89,7 @@ export default function DocumentsClient({ quotations, orders, basePath = '/dashb
         ].filter(Boolean).join(' ').toLowerCase()
         return haystack.includes(search.toLowerCase())
       })
-  }, [tab, search, statusFilter, quotations, orders])
+  }, [tab, phase, search, statusFilter, quotations, orders])
 
   const statusOptions = useMemo(() => {
     if (tab === 'quotation') return Object.entries(Q_STATUS).map(([k, v]) => ({ value: k, label: v.label }))
@@ -160,6 +186,18 @@ export default function DocumentsClient({ quotations, orders, basePath = '/dashb
               </button>
             ))}
           </div>
+          <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
+            {[
+              { id: 'active' as const, label: 'กำลังดำเนินการ' },
+              { id: 'finished' as const, label: 'เสร็จสิ้น' },
+              { id: 'all' as const, label: 'ทั้งหมด' },
+            ].map((p) => (
+              <button key={p.id} onClick={() => { setPhase(p.id); setStatusFilter('all') }}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium ${phase === p.id ? 'bg-white shadow-sm text-indigo-700' : 'text-gray-600'}`}>
+                {p.label}
+              </button>
+            ))}
+          </div>
           <div className="relative w-full sm:w-auto">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ค้นหา..."
@@ -188,7 +226,18 @@ export default function DocumentsClient({ quotations, orders, basePath = '/dashb
           <tbody className="divide-y divide-gray-50">
             {combined.map((doc) => (
               <tr key={`${doc.type}-${doc.id}`} className="hover:bg-gray-50">
-                <td className="px-5 py-3.5 font-mono text-xs text-gray-700">{doc.number}</td>
+                <td className="px-5 py-3.5 font-mono text-xs text-gray-700">
+                  <div>{doc.number}</div>
+                  {doc.relatedRef && (
+                    <button onClick={() => openDetail(doc.relatedRef.doc ?? { type: doc.relatedRef.type, id: doc.relatedRef.id })}
+                      className="mt-0.5 inline-flex items-center gap-0.5 text-[11px] text-indigo-600 hover:text-indigo-800 hover:underline"
+                      title="เปิดเอกสารที่เกี่ยวข้อง">
+                      {doc.type === 'order'
+                        ? <>↩ จาก {doc.relatedRef.number ?? 'ใบเสนอราคา'}</>
+                        : <>→ {doc.relatedRef.number ?? 'คำสั่งซื้อ'}</>}
+                    </button>
+                  )}
+                </td>
                 <td className="px-5 py-3.5">
                   <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${doc.type === 'quotation' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>
                     {doc.type === 'quotation' ? 'ใบเสนอราคา' : 'คำสั่งซื้อ'}
@@ -293,6 +342,14 @@ function DocumentDetailModal({ doc, full, loading, onClose, onExportPDF }: {
   const typeLabel = isQuotation ? 'ใบเสนอราคา' : 'คำสั่งซื้อ'
   const typeColor = isQuotation ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'
 
+  // When opened via a cross-reference link, `doc` may be a minimal stub
+  // ({type,id}) — fall back to the fetched `full` record for header fields.
+  const docNumber = doc.number ?? full?.quotation_number ?? full?.order_number
+  const docStatus = doc.status ?? full?.status
+  const statusInfo = doc.statusInfo ?? (isQuotation ? Q_STATUS[full?.status] : O_STATUS[full?.status])
+  const createdAt = doc.created_at ?? full?.created_at
+  const creator = doc.creator ?? full?.creator
+
   // Esc to close + lock body scroll
   useEffect(() => {
     const prev = document.body.style.overflow
@@ -313,14 +370,14 @@ function DocumentDetailModal({ doc, full, loading, onClose, onExportPDF }: {
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-semibold text-gray-900 truncate text-base">{typeLabel} {doc.number}</h3>
-                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${doc.statusInfo?.color ?? 'bg-gray-100'}`}>
-                  {doc.statusInfo?.label ?? doc.status}
+                <h3 className="font-semibold text-gray-900 truncate text-base">{typeLabel} {docNumber}</h3>
+                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusInfo?.color ?? 'bg-gray-100'}`}>
+                  {statusInfo?.label ?? docStatus}
                 </span>
               </div>
               <p className="text-xs text-gray-500 mt-1">
-                {new Date(doc.created_at).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                {(doc.creator?.first_name || doc.creator?.last_name) && ` · โดย ${doc.creator?.first_name ?? ''} ${doc.creator?.last_name ?? ''}`}
+                {createdAt && new Date(createdAt).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                {(creator?.first_name || creator?.last_name) && ` · โดย ${creator?.first_name ?? ''} ${creator?.last_name ?? ''}`}
               </p>
             </div>
           </div>
