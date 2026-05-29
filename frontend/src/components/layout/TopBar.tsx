@@ -86,14 +86,6 @@ export default function TopBar({ title }: Props) {
     loadNotifications()
   }
 
-  const markOneRead = async (n: any) => {
-    if (n.is_read) return
-    try {
-      await notificationsApi.markRead(n.id)
-      loadNotifications()
-    } catch { /* ignore */ }
-  }
-
   /** Click a notification → mark read + navigate to the related entity. */
   const handleNotifClick = async (n: any) => {
     if (!n.is_read) {

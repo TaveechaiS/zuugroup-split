@@ -5,7 +5,7 @@ import { supabaseAdmin } from '../lib/supabase'
 import { requireAuth, requireRole, AuthenticatedRequest } from '../middleware/auth'
 import { asyncHandler } from '../middleware/errorHandler'
 import { logActivity } from '../lib/activityLog'
-import { notifyUser, notifyRole } from '../lib/notify'
+import { notifyUser } from '../lib/notify'
 import { z } from 'zod'
 
 const router = Router()
